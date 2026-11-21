@@ -120,6 +120,22 @@ Con retarget (A = 0): 240 / 520 / 800 y 480 / 760 / 1040.
 - A + 72 ms: **−14° / +14°** (estado `salto`: se abren). Se mantienen así hasta tocar suelo.
 - Las hojas llegan 24 ms después que el cuerpo: se leen como algo blando que va detrás.
 
+**Carril de vuelo (no cruzar texto).** En vuelo, Brote no pasa por encima del texto: sale de la columna de texto a un carril a su izquierda, baja o sube por él y vuelve al ancla.
+
+- `xTexto` = borde izquierdo del título destino (la columna de texto es común a las tres secciones).
+- `xCarril = max(4px, xTexto − tamaño − 8px)` (borde izquierdo de Brote en el carril).
+  - Escritorio: `xTexto − 56px`. Queda fuera de la tarjeta, en el margen.
+  - Móvil: 4 px desde el borde del viewport.
+- Requisito de layout (Jaina y Thrall): `xTexto ≥ tamaño + 6px` en todos los anchos; en móvil, el texto empieza a 42 px o más del borde izquierdo. La maqueta publicada da unos 41 px a 390 px de ancho y hay que comprobarlo a 320 px.
+- Desplazamiento horizontal: cuarta animación en `#brote`, `translateX` con `composite:'add'`, de duración `total`:
+  - `0` al empezar → `xCarril − xAncla` al terminar la anticipación + 40 % del primer saltito, curva `cubic-bezier(0.33,0,0.67,1)`;
+  - se mantiene en el carril;
+  - vuelve a `0` desde el 60 % del último saltito hasta tocar suelo, misma curva.
+  - Con n = 1, salida y vuelta van dentro del mismo saltito (0–40 % y 60–100 %).
+- El avance vertical, el arco, la forma y los tiempos no cambian. El total sigue siendo 560 / 840 / 1120 ms.
+- Con retarget, la salida al carril parte del `translateX` actual. Si Brote ya está en el carril, se queda en él.
+- Con reduced-motion no aplica: fundido sin desplazamiento.
+
 **Navegación con scroll (clic en el nav o foco de teclado).** Sustituye a la regla de «entrar desde el borde» (v1), que en la PR #8 se leía como una aparición de ~100 ms.
 
 - **Brote acompaña el scroll.** Desde el inicio del scroll suave hasta `scrollend`, Brote mantiene su posición **en pantalla**: cada fotograma (rAF) se le suma a su `translate` el desplazamiento de scroll acumulado. No avanza ni salta: la vista lo encuentra donde lo dejó.
@@ -167,7 +183,7 @@ Desde que toca suelo (instante `llegada`):
 | Balanceo de hojas | `#brote-hoja-izq`, `#brote-hoja-der` (`32px 20px`) | 0° → 25 %: +4° → 75 %: −4° → 100 %: 0° | 2600 ms, infinito. La derecha con `animation-delay: −1300ms` | `seno` | El desfase rompe el espejo y parece brisa. ±4° no cambia la silueta. |
 | Mejillas | `#brote-mejillas` | Estáticas | — | — | Animarlas sería adorno. |
 
-**b) Aparición inicial**: empieza 360 ms después de `document.fonts.ready`, cuando la sección ya ha hecho el 75 % de su entrada. Termina con `brote:reposo {seccion, origen:'inicio'}`. Sin `brote:salto`.
+**b) Aparición inicial**: empieza en el mismo fotograma en que empieza la entrada de la sección inicial (el título pasa de opacity 0), sin esperar a `document.fonts.ready`. Si las fuentes cargan durante la caída y el ancla se mueve, el destino de la caída se actualiza al nuevo ancla sin reiniciar la animación (se cambia `--brote-x/--brote-y` y la caída sigue con `composite:'add'`). Termina con `brote:reposo {seccion, origen:'inicio'}`. Sin `brote:salto`.
 
 | Qué | Valores | Duración | Curva |
 |---|---|---|---|
@@ -175,7 +191,7 @@ Desde que toca suelo (instante `llegada`):
 | Caída (`#brote`, `composite: 'add'`) | `translateY(−24px)` → `0` | 260 ms | `bajada` |
 | Forma (`svg`) | `0.92, 1.08` → al tocar suelo (260 ms) `1.2, 0.8` → +80 ms `0.96, 1.04` → +160 ms `1, 1` | 420 ms | `impacto`, `salida`, `seno` |
 
-Total: 360 + 500 ms. Con `#hash`, aparece directamente en esa sección.
+Total: 500 ms desde que empieza la entrada de la sección (antes 360 + 500 ms: Garrosh midió 0,7 s sin mascota con el título ya visible). Con `#hash`, aparece directamente en esa sección.
 
 **c) Pausas**
 
@@ -214,7 +230,7 @@ Total: 360 + 500 ms. Con `#hash`, aparece directamente en esa sección.
 |---|---|
 | Cambio de sección de la mascota | Sin salto, desplazamiento ni squash (propuesta de Jaina), y sin cambio de golpe: fundido de salida de 120 ms (`entrada`, opacity 1→0) → recolocación en el destino sin animación → fundido de entrada de 160 ms (`desacel`, 0→1). Total: 280 ms. Mismos disparadores y esperas (§11.6). Emite solo `brote:reposo {seccion, origen}`, como la maqueta. |
 | Idle | Ninguno (`animation: none !important` en `svg` y sus hijos; `svg{transform:none!important}`, de Jaina). |
-| Aparición inicial | Solo opacity 0→1, 160 ms, `desacel`, con 360 ms de retraso. |
+| Aparición inicial | Solo opacity 0→1, 160 ms, `desacel`, sin retraso: empieza con la entrada de la sección. |
 | Secciones | Estado final sin transición. |
 | Scroll a ancla | `scroll-behavior: auto` (Jaina). |
 | Parallax | No hay en ningún modo. |
@@ -272,7 +288,7 @@ Números de línea de `portfolio-design/index.html` y `spec.md` del 21-11-2026:
 | `will-change` acotado | Solo en `#brote` y solo durante el viaje (C1). |
 | Lecturas de layout | El viaje lee posiciones una vez al empezar. La sección activa lee `getBoundingClientRect` de 3 secciones solo en los callbacks del IO. No se escribe estilo en handlers de scroll. |
 | Objetivo de rendimiento | 60 fps en móvil de gama media. Las animaciones van por el compositor, sin `requestAnimationFrame` que mueva estilos. |
-| La mascota no tapa texto | Posada en el hueco reservado (C2 lo garantiza también durante la entrada de secciones). En vuelo puede cruzar texto como mucho 1120 ms y no bloquea nada. |
+| La mascota no tapa texto | Posada en el hueco reservado (C2 lo garantiza también durante la entrada de secciones). En vuelo va por el carril de §11.1 y no cruza texto. |
 | No recibe eventos | `aria-hidden="true"`, `svg focusable="false"`, `pointer-events:none`, sin `tabindex`. `z-index` 15, por debajo de la barra (20). |
 | Originalidad | Ni la spec ni la demo nombran ningún juego. |
 
@@ -332,7 +348,7 @@ Se verifican con DevTools: Animations (velocidad 10 %), Performance, Rendering �
 17. Pestaña oculta: el viaje termina al instante y emite los eventos que faltaban. El idle queda en `paused`.
 18. Entrada de sección: `opacity 0→1` y `translateY(16px→0)` en 480 ms con `cubic-bezier(0.22,1,0.36,1)` al entrar el 12 % de la sección, una sola vez. Sin JS todo es visible.
 19. Barra: el color cambia en 160 ms. El subrayado entra en 240 ms con `cubic-bezier(0.22,1,0.36,1)` y vuelve en 160 ms con `cubic-bezier(0.4,0,1,1)`.
-20. Aparición inicial: 360 ms después de cargar las fuentes, caída de 24 px en 260 ms con fundido de 160 ms y aterrizaje de 160 ms. Termina con `brote:reposo {origen:'inicio'}`, sin `brote:salto`.
+20. Aparición inicial: Brote tiene opacity > 0 como mucho 1 fotograma (17 ms) después de que el título inicial tenga opacity > 0, y está en `brote:reposo` como mucho 500 ms después; caída de 24 px en 260 ms con fundido de 160 ms y aterrizaje de 160 ms. Termina con `brote:reposo {origen:'inicio'}`, sin `brote:salto`.
 21. Reduced-motion:
     - Cambio de sección con fundidos de 120 + 160 ms, sin desplazamiento visible y solo con `brote:reposo`.
     - Sin idle.
@@ -342,3 +358,4 @@ Se verifican con DevTools: Animations (velocidad 10 %), Performance, Rendering �
 23. En una grabación de Performance de un viaje solo se animan `transform` y `opacity`, y no hay *Layout* provocado por la animación. `will-change` existe solo en `#brote` y solo durante el viaje.
 24. A 320 px de ancho no aparece scroll horizontal en ningún momento.
 25. No queda ninguna marca `PROVISIONAL – movimiento de Sylvanas` en el código entregado.
+26. Carril de vuelo: entre `brote:salto` y `brote:aterrizaje`, a 390 px y 1440 px, la caja de Brote no se cruza con la caja de ninguna línea de texto (párrafos, rasgos, chips, enlaces). Solo se exceptúan los títulos de origen y destino durante los 120 ms primeros y últimos. En el carril, el borde izquierdo de Brote está en `max(4px, xTexto − tamaño − 8px)` con ±1 px.
