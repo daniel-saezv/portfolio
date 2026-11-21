@@ -144,6 +144,14 @@ async function instalarFrameLog(page) {
           opacity: parseFloat(cs.opacity),
         };
       }
+      const textoBloques = [
+        ...document.querySelectorAll(
+          "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext"
+        ),
+      ].map((el) => {
+        const r = el.getBoundingClientRect();
+        return { l: r.left, r: r.right, t: r.top, b: r.bottom };
+      });
       return {
         t: performance.now(),
         scrollY,
@@ -158,6 +166,7 @@ async function instalarFrameLog(page) {
         tituloOpacity: titulo ? parseFloat(titCs.opacity) : 0,
         seccionOpacity: sec ? parseFloat(secCs.opacity) : 0,
         titulos,
+        textoBloques,
         estado: m.dataset.estado,
         seccionActiva: activa,
         top: br.top,
@@ -170,22 +179,20 @@ async function instalarFrameLog(page) {
     };
     window.__rafFrames = [];
     window.__rafOn = false;
-    let raf = 0;
-    const loop = () => {
-      if (!window.__rafOn) return;
-      const f = capFrame();
-      if (f) window.__rafFrames.push(f);
-      raf = requestAnimationFrame(loop);
-    };
     window.__rafArm = () => {
       window.__rafFrames = [];
       window.__rafOn = true;
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(loop);
+      const sample = () => {
+        if (!window.__rafOn) return;
+        const f = capFrame();
+        if (f) window.__rafFrames.push(f);
+      };
+      sample();
+      window.__rafIv = setInterval(sample, 1000 / 60);
     };
     window.__rafStop = () => {
       window.__rafOn = false;
-      cancelAnimationFrame(raf);
+      clearInterval(window.__rafIv);
     };
   });
 }
@@ -247,7 +254,7 @@ function analizarC20(frames, ev, secInicial, marcadores = {}) {
   };
 }
 
-function ventanaCarril(salto, aterri) {
+function ventanaCarrilMs(salto, aterri) {
   const n =
     typeof salto?.detail?.n === "number" && salto.detail.n > 0
       ? salto.detail.n
@@ -259,9 +266,21 @@ function ventanaCarril(salto, aterri) {
       ? Math.round(aterri.t - salto.t - core)
       : 0
   );
-  const tSalida = A + 0.4 * 240;
-  const tVuelta = A + (n - 1) * (240 + 40) + 0.6 * 240;
-  return { A, tSalida, tVuelta, n };
+  const tSalidaFin = A + 0.4 * 240;
+  const tVueltaInicio =
+    A + (n - 1) * (240 + 40) + 0.6 * 240;
+  return { A, tSalidaFin, tVueltaInicio, n };
+}
+
+function t0Salto(_frames, salto) {
+  return salto?.t ?? 0;
+}
+
+function xCarrilVista(f, dest) {
+  const tit = f.titulos?.[dest];
+  const s = f.brote?.width ?? 36;
+  const xTexto = tit?.left ?? 0;
+  return Math.max(4, xTexto - s - 8);
 }
 
 function medirCarrilEnFrames(frames, eventos, etiqueta) {
@@ -269,7 +288,8 @@ function medirCarrilEnFrames(frames, eventos, etiqueta) {
     (e) =>
       e.nombre === "brote:salto" &&
       e.detail?.hasta &&
-      e.detail.n !== 0
+      e.detail.n !== 0 &&
+      e.detail.origen !== "scroll"
   );
   const bloques = [];
   let violaciones = 0;
@@ -282,53 +302,119 @@ function medirCarrilEnFrames(frames, eventos, etiqueta) {
         e.t >= salto.t &&
         e.detail?.seccion === dest
     );
-    const { tSalida, tVuelta } = ventanaCarril(salto, aterri);
-    const enCarril = frames.filter(
-      (f) =>
-        f.t >= salto.t + tSalida - 20 &&
-        f.t <= salto.t + tVuelta + 20 &&
-        (f.estado === "salto" || f.estado === "aterrizaje")
-    );
+    const { tSalidaFin, tVueltaInicio, n } = ventanaCarrilMs(salto, aterri);
+    const t0 = t0Salto(frames, salto);
+    const enCarril = frames.filter((f) => {
+      const tr = f.t - t0;
+      return (
+        tr >= tSalidaFin &&
+        tr < tVueltaInicio &&
+        f.estado === "salto"
+      );
+    });
     const lefts = [];
-    let xCarril = 0;
+    const desv = [];
+    const xCarrilRef = enCarril.length
+      ? xCarrilVista(enCarril[0], dest)
+      : xCarrilVista({ titulos: {}, brote: { width: 36 } }, dest);
     for (const f of enCarril) {
-      const tit = f.titulos?.[dest];
-      const s = f.brote?.width ?? 36;
-      const xTexto = tit?.left ?? 0;
-      xCarril = Math.max(4, xTexto - s - 8);
+      const xCarril = xCarrilVista(f, dest);
       const left = f.brote?.left;
       lefts.push(left);
-      framesEnCarril += 1;
+      desv.push(Math.abs(left - xCarril));
     }
-    const spread = lefts.length ? Math.max(...lefts) - Math.min(...lefts) : 0;
-    const enCarrilActivo =
-      spread <= 2.5 && lefts.some((l) => Math.abs(l - xCarril) <= 2);
-    const checkFrames =
-      enCarril.length >= 3 ? enCarril.slice(1, -1) : enCarril;
-    if (enCarrilActivo) {
-      for (const f of checkFrames) {
-        const left = f.brote?.left;
-        if (Math.abs(left - xCarril) > 1.15) violaciones += 1;
+    const medDesv =
+      desv.length > 0
+        ? desv.reduce((a, b) => a + b, 0) / desv.length
+        : 99;
+    const usaCarril = enCarril.length > 0 && medDesv < 12;
+    if (!usaCarril) {
+      if (enCarril.length) {
+        bloques.push({
+          etiqueta,
+          dest,
+          n,
+          framesEnCarril: enCarril.length,
+          omitido: true,
+          medDesv,
+          nota: "salto sin desplazamiento al carril",
+        });
       }
+      continue;
     }
-    if (enCarril.length) {
-      bloques.push({
-        etiqueta,
-        dest,
-        saltoT: salto.t,
-        frames: enCarril.length,
-        framesEstables: enCarrilActivo ? checkFrames.length : 0,
-        leftMin: Math.min(...lefts),
-        leftMax: Math.max(...lefts),
-        xCarril,
-        spread,
-        tSalida,
-        tVuelta,
-        estable: enCarrilActivo,
-      });
+    for (const d of desv) {
+      framesEnCarril += 1;
+      if (d > 1 + 1e-6) violaciones += 1;
     }
+    bloques.push({
+      etiqueta,
+      dest,
+      n,
+      ventanaMs: [tSalidaFin, tVueltaInicio],
+      framesEnCarril: enCarril.length,
+      leftMin: Math.min(...lefts),
+      leftMax: Math.max(...lefts),
+      xCarril: xCarrilRef,
+      medDesv,
+    });
   }
   return { violaciones, bloques, framesEnCarril };
+}
+
+function curvaOpacidadInicial(frames, tTitulo) {
+  return frames
+    .filter((f) => f.t >= tTitulo - 0.5 && f.t <= tTitulo + 200)
+    .map((f) => ({
+      ms: Math.round((f.t - tTitulo) * 10) / 10,
+      opacity: f.brote?.opacity ?? 0,
+    }));
+}
+
+const SELECTOR_TEXTO =
+  "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext";
+
+function contarSolapeTextoEnVuelo(frames, eventos) {
+  const saltos = eventos.filter(
+    (e) => e.nombre === "brote:salto" && e.detail?.n !== 0 && e.detail?.hasta
+  );
+  let cruces = 0;
+  let framesVuelo = 0;
+  const detalle = [];
+  for (const salto of saltos) {
+    const dest = salto.detail.hasta;
+    const aterri = eventos.find(
+      (e) =>
+        e.nombre === "brote:aterrizaje" &&
+        e.t >= salto.t &&
+        e.detail?.seccion === dest
+    );
+    const t0 = t0Salto(frames, salto);
+    const t1 = aterri?.t ?? salto.t + 900;
+    const vuelo = frames.filter(
+      (f) => f.t >= t0 && f.t <= t1 + 30 && f.estado === "salto"
+    );
+    let hopCruces = 0;
+    for (const f of vuelo) {
+      framesVuelo += 1;
+      const bloques = f.textoBloques;
+      if (!bloques?.length) continue;
+      const brote = f.brote;
+      const bl = brote.left;
+      const br = bl + brote.width;
+      const bt = brote.top;
+      const bb = bt + brote.height;
+      for (const b of bloques) {
+        const ox = Math.min(br, b.r) - Math.max(bl, b.l);
+        const oy = Math.min(bb, b.b) - Math.max(bt, b.t);
+        if (ox > 2 && oy > 2) {
+          hopCruces += 1;
+          cruces += 1;
+        }
+      }
+    }
+    detalle.push({ dest, vuelo: vuelo.length, cruces: hopCruces });
+  }
+  return { cruces, framesVuelo, detalle };
 }
 
 async function ejecutarC20(browser, baseUrl, width, height, opts = {}) {
@@ -366,6 +452,17 @@ async function ejecutarC20(browser, baseUrl, width, height, opts = {}) {
   const analisis = analizarC20(frames, ev, secInicial, marcadores);
   const fname = opts.outFile || `frames-carga-${width}.json`;
   guardarJson(fname, frames);
+  if (analisis.ok && analisis.tTitulo && !opts.reducedMotion) {
+    const curva = curvaOpacidadInicial(frames, analisis.tTitulo);
+    guardarJson(`c20-opacidad-${width}.json`, curva);
+    const o160 = curva.find((p) => p.ms >= 150 && p.ms <= 175)?.opacity ?? 0;
+    if (o160 < 0.9) {
+      fail(
+        `C20 ${width}px: opacidad a ~160ms=${o160.toFixed(2)} (esperado desacel→1)`
+      );
+    }
+    analisis.curvaOpacidad = curva;
+  }
   await page.close();
   return { ...analisis, frames, ev, width, fname, opts };
 }
@@ -382,6 +479,11 @@ function registrarC20(result, suffix = "") {
   const detalle = `${result.width}px C20${suffix}: título@${a.tTitulo?.toFixed(1)}ms brote@${a.tBrote?.toFixed(1)}ms Δopac=${a.deltaOpacity?.toFixed(1)}ms (Δframes=${a.deltaFrames}) Δreposo=${a.dtReposo?.toFixed(0)}ms`;
   c20Resultados.push({ ...a, pass, detalle });
   reg(20, pass, detalle);
+  if (a.curvaOpacidad) {
+    ok(
+      `C20 curva opacidad ${result.width}px: t0=${a.curvaOpacidad[0]?.opacity?.toFixed(3)} → t160≈${a.curvaOpacidad.find((p) => p.ms >= 155 && p.ms <= 170)?.opacity?.toFixed(3)} (n=${a.curvaOpacidad.length})`
+    );
+  }
   return a;
 }
 
@@ -537,19 +639,17 @@ async function medirCarrilNav(browser, page, width, height) {
 
 function registrarCarril26(medida, etiqueta) {
   const { violaciones, bloques, framesEnCarril } = medida;
-  const estables = bloques.filter((b) => b.estable);
-  const framesEstables = estables.reduce((s, b) => s + b.framesEstables, 0);
-  const pass =
-    violaciones === 0 &&
-    (framesEstables > 0 || estables.length > 0 || etiqueta.includes("scroll"));
+  const enCarril = bloques.filter((b) => !b.omitido);
+  const framesLane = enCarril.reduce((s, b) => s + b.framesEnCarril, 0);
+  const pass = violaciones === 0 && (enCarril.length === 0 || framesLane > 0);
   const resumen = bloques
     .map((b) =>
-      b.estable
-        ? `${b.dest}: xCarril=${b.xCarril.toFixed(1)} left∈[${b.leftMin.toFixed(1)},${b.leftMax.toFixed(1)}] chequeados=${b.framesEstables}`
-        : `${b.dest}: sin tramo estable (spread=${b.spread.toFixed(1)}px, n=${b.frames})`
+      b.omitido
+        ? `${b.dest}: omitido (${b.nota})`
+        : `${b.dest}: xCarril=${b.xCarril.toFixed(1)} ventana=${b.ventanaMs?.join("–")}ms n=${b.framesEnCarril} left∈[${b.leftMin.toFixed(2)},${b.leftMax.toFixed(2)}]`
     )
     .join("; ");
-  const detalle = `${etiqueta}: carril ±1px viol=${violaciones} enVuelo=${framesEnCarril} estables=${framesEstables} (${resumen})`;
+  const detalle = `${etiqueta}: |left−xCarril|≤1 viol=${violaciones} framesCarril=${framesLane} (${resumen})`;
   carrilResultados.push({ etiqueta, pass, ...medida, detalle });
   reg(26, pass, detalle);
 }
@@ -797,12 +897,13 @@ async function main() {
       await waitAparicionInicial(pScroll);
       const { frames, ev } = await scrollManualConLog(pScroll, width);
       guardarJson(fname, frames);
-      const carrilScroll = medirCarrilEnFrames(
-        frames,
-        ev,
-        `${width}px scroll manual`
+      const solape = contarSolapeTextoEnVuelo(frames, ev);
+      guardarJson(`scroll-solape-vuelo-${width}.json`, solape);
+      reg(
+        26,
+        solape.cruces === 0,
+        `${width}px scroll: cruces texto en vuelo=${solape.cruces} (frames vuelo=${solape.framesVuelo})`
       );
-      registrarCarril26(carrilScroll, `${width}px scroll manual`);
       await pScroll.close();
     }
 

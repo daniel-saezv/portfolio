@@ -223,19 +223,32 @@
 
     const xTexto = xTextoDoc(hasta);
     const xCarril = Math.max(4, xTexto - s - 8);
-    const laneDx = Math.round(xCarril - o.x);
-  const tSalidaCarril = A + 0.4 * T.salto;
+    const posSaltoFraccion = (hopI, frac) => {
+      const p0 = {
+        x: o.x + (hopI / nS) * (d.x - o.x),
+        y: o.y + (hopI / nS) * (d.y - o.y),
+      };
+      const p1 = {
+        x: o.x + ((hopI + 1) / nS) * (d.x - o.x),
+        y: o.y + ((hopI + 1) / nS) * (d.y - o.y),
+      };
+      return {
+        x: p0.x + frac * (p1.x - p0.x),
+        y: p0.y + frac * (p1.y - p0.y),
+      };
+    };
+    const tSalidaCarril = A + 0.4 * T.salto;
     const tVueltaCarril =
       A + (nS - 1) * (T.salto + T.contacto) + 0.6 * T.salto;
+    const pSalidaCarril = posSaltoFraccion(0, 0.4);
+    const pVueltaCarril = posSaltoFraccion(nS - 1, 0.6);
 
     const kV = [{ offset: 0, transform: tr(o), easing: E.cuerda }];
     const kArc = [{ offset: 0, transform: "translateY(0px)", easing: E.cuerda }];
-    const kX = [{ offset: 0, transform: `translateX(${xAdd0}px)` }];
     const kF = [{ offset: 0, transform: sc([mF.a, mF.d]), easing: E.anticipa }];
     if (A) {
       kV.push({ offset: off(A), transform: tr(o) });
       kArc.push({ offset: off(A), transform: "translateY(0px)" });
-      kX.push({ offset: off(A), transform: `translateX(${xAdd0}px)` });
       kF.push({ offset: off(A), transform: sc(F.anticipa) });
     }
     for (let i = 0; i < nS; i++) {
@@ -283,19 +296,50 @@
         transform: sc(i === nS - 1 ? F.aterrizaje : F.contacto),
       });
     }
-    kX.at(-1).easing = E.anticipa;
-    kX.push({
-      offset: off(tSalidaCarril),
-      transform: `translateX(${laneDx}px)`,
-    });
-    kX.push({
-      offset: off(tVueltaCarril),
-      transform: `translateX(${laneDx}px)`,
-    });
-    kX.at(-1).easing = E.anticipa;
-    kX.push({ offset: off(llegada), transform: "translateX(0px)" });
+    kV.push({ offset: 1, transform: tr(d) });
+    kV.sort((a, b) => a.offset - b.offset);
+    const offSalida = off(tSalidaCarril);
+    const offVuelta = off(tVueltaCarril);
+    const docX = (transform) => {
+      const m = transform.match(/translate\((-?[\d.]+)px/);
+      return m ? parseFloat(m[1]) : 0;
+    };
+    const xLane = xCarril;
+    const kX = [
+      { offset: 0, transform: `translateX(${xAdd0}px)`, easing: E.anticipa },
+    ];
+    const addKx = (offset, pathX, easing) => {
+      kX.push({
+        offset,
+        transform: `translateX(${xLane - pathX}px)`,
+        easing: easing || E.cuerda,
+      });
+    };
+    if (origen === "scroll") {
+      const desde = off(Math.max(A, 0));
+      const k0 = docX(kV[0].transform);
+      kX[0].transform = `translateX(${xAdd0 + xLane - k0}px)`;
+      for (const kf of kV) {
+        if (kf.offset < desde + 1e-6) continue;
+        if (kf.offset >= offVuelta - 1e-6) break;
+        addKx(kf.offset, docX(kf.transform), kf.easing);
+      }
+    } else {
+      addKx(offSalida, docX(tr(posSaltoFraccion(0, 0.4))), E.cuerda);
+      for (const kf of kV) {
+        if (kf.offset <= offSalida + 1e-6) continue;
+        if (kf.offset >= offVuelta - 1e-6) break;
+        addKx(kf.offset, docX(kf.transform), kf.easing);
+      }
+    }
+    const pVuelta = posSaltoFraccion(nS - 1, 0.6);
+    addKx(offVuelta, docX(tr(pVuelta)), E.anticipa);
+    kX.push(
+      { offset: off(llegada), transform: "translateX(0px)", easing: E.anticipa },
+      { offset: 1, transform: "translateX(0px)" }
+    );
+    kX.sort((a, b) => a.offset - b.offset);
     kArc.push({ offset: 1, transform: "translateY(0px)" });
-    kX.push({ offset: 1, transform: "translateX(0px)" });
     kF.at(-1).easing = E.salida;
     kF.push({
       offset: off(llegada + T.aterrizaje / 2),
@@ -307,7 +351,6 @@
       transform: "scale(1, 1)",
     });
     kF.push({ offset: 1, transform: "scale(1, 1)" });
-    kV.push({ offset: 1, transform: tr(d) });
     const kH = (a, signo) => [
       { offset: 0, transform: `rotate(${a}deg)`, easing: E.salida },
       {
@@ -333,6 +376,7 @@
     mascota.style.willChange = "transform";
     mascota.style.opacity = "";
     viajando = true;
+    scrollViajeY = scrollY;
     aterrizado = false;
     const desdeEvento = retarget && viajeDestino ? viajeDestino : desde;
     viajeDestino = hasta;
@@ -505,6 +549,7 @@
   let ultimoScrollY = 0;
   let acompanandoScroll = false;
   let saltoSinA = false;
+  let scrollViajeY = 0;
 
   function navAlto() {
     return document.querySelector(".nav").offsetHeight;
@@ -647,6 +692,14 @@
   addEventListener(
     "scroll",
     () => {
+      if (viajando) {
+        const delta = scrollY - scrollViajeY;
+        if (delta !== 0) {
+          const p = posDocDesdeCss();
+          fijar({ x: p.x, y: p.y + delta });
+          scrollViajeY = scrollY;
+        }
+      }
       if (pendiente?.navScroll && !viajando) {
         const delta = scrollY - ultimoScrollY;
         if (delta !== 0) {
