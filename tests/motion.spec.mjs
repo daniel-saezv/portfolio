@@ -73,6 +73,41 @@ async function setupEventLog(page) {
   });
 }
 
+const NAV_LINKS = [
+  { href: "#sobre-mi", id: "sobre-mi" },
+  { href: "#habilidades", id: "habilidades" },
+  { href: "#enlaces", id: "enlaces" },
+];
+
+async function solapeTitulo(page, sectionId) {
+  return page.evaluate((id) => {
+    const titulo = document.getElementById(id).querySelector(".titulo-seccion");
+    const m = document.getElementById("mascota");
+    const tr = titulo.getBoundingClientRect();
+    const mr = m.getBoundingClientRect();
+    const pad = parseFloat(getComputedStyle(titulo).paddingTop);
+    const textoTop = tr.top + pad;
+    return Math.max(0, mr.bottom - textoTop - 2);
+  }, sectionId);
+}
+
+async function solapeTrasCargaFresca(browser, baseUrl, width, href, sectionId) {
+  const page = await browser.newPage({
+    viewport: { width, height: width === 390 ? 844 : 900 },
+  });
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await waitFonts(page);
+  await page.click(`nav a[href="${href}"]`);
+  await page.waitForFunction(
+    () => document.getElementById("mascota")?.dataset.estado === "reposo",
+    null,
+    { timeout: 12000 }
+  );
+  const solape = await solapeTitulo(page, sectionId);
+  await page.close();
+  return solape;
+}
+
 async function medicionAnclaje(page, sectionId) {
   return page.evaluate((id) => {
     const mascota = document.getElementById("mascota");
@@ -144,15 +179,26 @@ async function main() {
       registro(1, m.tam === 36, `390px tamaño mascota=${m.tam}`);
       await pageM.close();
 
-      await page.click('nav a[href="#enlaces"]');
-      await page.waitForTimeout(T.quietud + 50);
-      const trasClic = await medicionAnclaje(page, "enlaces");
-      registro(
-        2,
-        trasClic.overlapTitulo <= 2,
-        `Tras clic Enlaces al cargar: solape título ≤2px (${trasClic.overlapTitulo.toFixed(1)}px)`
-      );
       await page.close();
+    }
+
+    // C2 — solape: cada ancla tras carga fresca (reload entre enlaces), 390 y 1440
+    console.log("\n=== Solape tras carga fresca ===\n");
+    for (const width of [390, 1440]) {
+      for (const { href, id } of NAV_LINKS) {
+        const solape = await solapeTrasCargaFresca(
+          browser,
+          baseUrl,
+          width,
+          href,
+          id
+        );
+        registro(
+          2,
+          solape <= 2,
+          `${width}px recarga → clic ${id}: solape ${solape.toFixed(1)}px`
+        );
+      }
     }
 
     // C3 — accesibilidad mascota
@@ -658,15 +704,349 @@ async function main() {
       await page.close();
     }
 
-    // Criterios documentados por medición (8, 12, 13, 15, 17) — verificados en demo/spec
-    for (const [id, txt] of [
-      [8, "Tab/foco: misma espera scroll que ancla (lógica compartida setActiva)"],
-      [12, "Curvas WAAPI según §11.1 (cuerda/subida/bajada/escalas en script.js)"],
-      [13, "Hojas ±14°/±12° en keyframes WAAPI (HOJA constante)"],
-      [15, "Recorte origen/destino fuera viewport (función recorta en viajar)"],
-      [17, "visibilitychange finish() en script.js"],
-    ]) {
-      registro(id, true, `${txt} — revisión estática código`);
+    // C8 — foco: misma cola de espera que ancla
+    {
+      const medirAncla = async () => {
+        const page = await browser.newPage({
+          viewport: { width: 1440, height: 900 },
+        });
+        await setupEventLog(page);
+        await page.goto(baseUrl, { waitUntil: "networkidle" });
+        await waitFonts(page);
+        await page.waitForFunction(
+          () => document.getElementById("mascota").dataset.estado === "reposo",
+          null,
+          { timeout: 10000 }
+        );
+        await page.evaluate(() => {
+          window.__t0 = performance.now();
+        });
+        await page.click('nav a[href="#enlaces"]');
+        await page.waitForFunction(() =>
+          window.__eventos.some(
+            (e) => e.nombre === "brote:salto" && e.detail.origen === "ancla"
+          )
+        );
+        const d = await page.evaluate(() => {
+          const salto = window.__eventos.find(
+            (e) => e.nombre === "brote:salto" && e.detail.origen === "ancla"
+          );
+          return { delta: salto.t - window.__t0, seccion: salto.detail.hasta };
+        });
+        await page.close();
+        return d;
+      };
+      const medirFoco = async () => {
+        const page = await browser.newPage({
+          viewport: { width: 1440, height: 900 },
+        });
+        await setupEventLog(page);
+        await page.goto(baseUrl, { waitUntil: "networkidle" });
+        await waitFonts(page);
+        await page.waitForFunction(
+          () => document.getElementById("mascota").dataset.estado === "reposo",
+          null,
+          { timeout: 10000 }
+        );
+        await page.evaluate(() => {
+          window.__t0 = performance.now();
+        });
+        await page.locator("#enlaces").focus();
+        await page.waitForFunction(() =>
+          window.__eventos.some(
+            (e) => e.nombre === "brote:salto" && e.detail.origen === "foco"
+          )
+        );
+        const d = await page.evaluate(() => {
+          const salto = window.__eventos.find(
+            (e) => e.nombre === "brote:salto" && e.detail.origen === "foco"
+          );
+          return { delta: salto.t - window.__t0, seccion: salto.detail.hasta };
+        });
+        await page.close();
+        return d;
+      };
+      const ancla = await medirAncla();
+      const foco = await medirFoco();
+      registro(
+        8,
+        ancla.seccion === "enlaces" && foco.seccion === "enlaces",
+        "Ancla y foco saltan a enlaces"
+      );
+      const midAncla = await (async () => {
+        const page = await browser.newPage({
+          viewport: { width: 1440, height: 900 },
+        });
+        await setupEventLog(page);
+        await page.goto(baseUrl, { waitUntil: "networkidle" });
+        await waitFonts(page);
+        await page.waitForFunction(
+          () => document.getElementById("mascota").dataset.estado === "reposo",
+          null,
+          { timeout: 10000 }
+        );
+        await page.click('nav a[href="#enlaces"]');
+        await page.waitForTimeout(5);
+        const snap = await page.evaluate(() => ({
+          saltoYa: window.__eventos.some((e) => e.nombre === "brote:salto"),
+          aria: document
+            .querySelector('nav a[href="#enlaces"]')
+            .getAttribute("aria-current"),
+        }));
+        await page.close();
+        return snap;
+      })();
+      const midFoco = await (async () => {
+        const page = await browser.newPage({
+          viewport: { width: 1440, height: 900 },
+        });
+        await setupEventLog(page);
+        await page.goto(baseUrl, { waitUntil: "networkidle" });
+        await waitFonts(page);
+        await page.waitForFunction(
+          () => document.getElementById("mascota").dataset.estado === "reposo",
+          null,
+          { timeout: 10000 }
+        );
+        await page.locator("#enlaces").focus();
+        await page.waitForTimeout(5);
+        const snap = await page.evaluate(() => ({
+          saltoYa: window.__eventos.some((e) => e.nombre === "brote:salto"),
+          aria: document
+            .querySelector('nav a[href="#enlaces"]')
+            .getAttribute("aria-current"),
+        }));
+        await page.close();
+        return snap;
+      })();
+      registro(
+        8,
+        midAncla.aria === "true" && midFoco.aria === "true",
+        "aria-current al instante en ancla y foco"
+      );
+      registro(
+        8,
+        midAncla.saltoYa === midFoco.saltoYa,
+        `Cola idéntica a +5ms: salto ancla=${midAncla.saltoYa} foco=${midFoco.saltoYa}`
+      );
+      registro(
+        8,
+        Math.abs(ancla.delta - foco.delta) < 250,
+        `Misma cola ancla/foco: Δ ${Math.abs(ancla.delta - foco.delta).toFixed(0)}ms < 250ms`
+      );
+    }
+
+    // C12 — curvas WAAPI (getKeyframes)
+    {
+      const page = await browser.newPage({
+        viewport: { width: 1440, height: 900 },
+      });
+      await page.goto(baseUrl, { waitUntil: "networkidle" });
+      await waitFonts(page);
+      await page.waitForFunction(
+        () => document.getElementById("mascota").dataset.estado === "reposo",
+        null,
+        { timeout: 10000 }
+      );
+      await page.click('nav a[href="#enlaces"]');
+      await page.waitForFunction(
+        () => document.getElementById("mascota").dataset.estado === "salto",
+        null,
+        { timeout: 5000 }
+      );
+      const sample = await page.evaluate(() => {
+        const m = document.getElementById("mascota");
+        const svg = m.querySelector("svg");
+        const easings = new Set();
+        const transforms = [];
+        for (const el of [m, svg]) {
+          for (const a of el.getAnimations()) {
+            const kf = a.effect?.getKeyframes?.() ?? [];
+            kf.forEach((k) => {
+              if (k.easing) easings.add(k.easing);
+              if (k.transform) transforms.push(k.transform);
+            });
+          }
+        }
+        return { easings: [...easings], transforms: transforms.join(" ") };
+      });
+      const tieneCuerda = sample.easings.some((e) =>
+        /0\.3[^,]*,\s*0[^,]*,\s*0\.7/.test(e)
+      );
+      const tieneSubida = sample.easings.some((e) =>
+        /0\.5[^,]*,\s*1[^,]*,\s*0\.89/.test(e)
+      );
+      const tieneEscalaSalto = /0\.86|scale\(0\.86/.test(sample.transforms);
+      registro(
+        12,
+        tieneCuerda && tieneSubida && tieneEscalaSalto,
+        `WAAPI: cuerda=${tieneCuerda}, subida=${tieneSubida}, scale salto=${tieneEscalaSalto}`
+      );
+      await page.close();
+    }
+
+    // C13 — ángulos de hojas en keyframes
+    {
+      const page = await browser.newPage({
+        viewport: { width: 1440, height: 900 },
+      });
+      await page.goto(baseUrl, { waitUntil: "networkidle" });
+      await waitFonts(page);
+      await page.waitForFunction(
+        () => document.getElementById("mascota").dataset.estado === "reposo",
+        null,
+        { timeout: 10000 }
+      );
+      await page.click('nav a[href="#enlaces"]');
+      await page.waitForFunction(
+        () => document.getElementById("mascota").dataset.estado === "salto",
+        null,
+        { timeout: 5000 }
+      );
+      const leaf = await page.evaluate(() => {
+        const izq = document.getElementById("brote-hoja-izq");
+        const der = document.getElementById("brote-hoja-der");
+        const all = [...izq.getAnimations(), ...der.getAnimations()].flatMap(
+          (a) => a.effect?.getKeyframes?.() ?? []
+        );
+        return all.map((k) => k.transform).filter(Boolean).join(" ");
+      });
+      const aire = /rotate\(-14deg\)|rotate\(\s*-14/.test(leaf);
+      const aterri = /rotate\(12deg\)|rotate\(\s*12/.test(leaf);
+      registro(
+        13,
+        aire && aterri,
+        `Hojas en keyframes: −14° en aire=${aire}, ±12° aterrizaje=${aterri}`
+      );
+      await page.close();
+    }
+
+    // C15 — recorte fuera del viewport (destino debajo del pliegue)
+    {
+      const page = await browser.newPage({
+        viewport: { width: 1440, height: 500 },
+      });
+      await setupEventLog(page);
+      await page.goto(baseUrl, { waitUntil: "networkidle" });
+      await waitFonts(page);
+      await page.waitForFunction(
+        () => document.getElementById("mascota").dataset.estado === "reposo",
+        null,
+        { timeout: 10000 }
+      );
+      await page.click('nav a[href="#enlaces"]');
+      await page.waitForFunction(
+        () => window.__eventos?.some((e) => e.nombre === "brote:salto"),
+        null,
+        { timeout: 15000 }
+      );
+      await page.waitForFunction(
+        () => document.getElementById("mascota").getAnimations().length > 0,
+        null,
+        { timeout: 5000 }
+      );
+      const clip = await page.evaluate(() => {
+        const m = document.getElementById("mascota");
+        const nav = document.querySelector(".nav").offsetHeight;
+        const tam = m.offsetWidth;
+        const abajo = scrollY + innerHeight;
+        const bordeRecorte = abajo + 8;
+        const kf = m.getAnimations()[0]?.effect?.getKeyframes?.() ?? [];
+        const last = kf[kf.length - 1];
+        const match = last?.transform?.match(
+          /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/
+        );
+        const yLast = match ? parseFloat(match[2]) : null;
+        const destReal = (() => {
+          const t = document
+            .getElementById("enlaces")
+            .querySelector(".titulo-seccion");
+          let x = 0;
+          let y = 0;
+          for (let e = t; e; e = e.offsetParent) {
+            x += e.offsetLeft;
+            y += e.offsetTop;
+          }
+          const pad = parseFloat(getComputedStyle(t).paddingTop);
+          return { y: Math.round(y + pad - tam + 2) };
+        })();
+        const destFuera = destReal.y > abajo;
+        return {
+          destFuera,
+          bordeRecorte,
+          yLast,
+          destRealY: destReal.y,
+          diff: yLast == null ? 999 : Math.abs(yLast - bordeRecorte),
+        };
+      });
+      registro(
+        15,
+        clip.destFuera && clip.diff <= 6,
+        `Destino recortado: realY=${clip.destRealY} > pliegue; keyframe y=${clip.yLast} vs ${clip.bordeRecorte} (Δ${clip.diff.toFixed(1)})`
+      );
+      await page.close();
+    }
+
+    // C17 — visibilitychange oculta: termina en destino
+    {
+      const page = await browser.newPage({
+        viewport: { width: 1440, height: 900 },
+      });
+      await setupEventLog(page);
+      await page.goto(baseUrl, { waitUntil: "networkidle" });
+      await waitFonts(page);
+      await page.waitForFunction(
+        () => document.getElementById("mascota").dataset.estado === "reposo",
+        null,
+        { timeout: 10000 }
+      );
+      await page.click('nav a[href="#enlaces"]');
+      await page.waitForFunction(
+        () => document.getElementById("mascota").dataset.estado === "salto",
+        null,
+        { timeout: 5000 }
+      );
+      await page.evaluate(() => {
+        Object.defineProperty(document, "hidden", {
+          configurable: true,
+          get: () => true,
+        });
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      await page.waitForFunction(
+        () => document.getElementById("mascota").dataset.estado === "reposo",
+        null,
+        { timeout: 5000 }
+      );
+      const fin = await page.evaluate(() => {
+        const ev = window.__eventos;
+        const reposo = ev.filter((e) => e.nombre === "brote:reposo").at(-1);
+        const m = document.getElementById("enlaces").querySelector(".titulo-seccion");
+        let x = 0;
+        let y = 0;
+        for (let e = m; e; e = e.offsetParent) {
+          x += e.offsetLeft;
+          y += e.offsetTop;
+        }
+        const tam = document.getElementById("mascota").offsetWidth;
+        const pad = parseFloat(getComputedStyle(m).paddingTop);
+        const ey = Math.round(y + pad - tam + 2);
+        const actual = parseFloat(
+          getComputedStyle(document.getElementById("mascota")).getPropertyValue(
+            "--brote-y"
+          )
+        );
+        return {
+          seccion: reposo?.detail?.seccion,
+          okY: Math.abs(actual - ey) <= 2,
+        };
+      });
+      registro(
+        17,
+        fin.seccion === "enlaces" && fin.okY,
+        "Tab oculta: reposo en enlaces y anclaje correcto"
+      );
+      await page.close();
     }
 
     console.log("\n=== Capturas y vídeo ===\n");
@@ -696,24 +1076,25 @@ async function main() {
       await page.close();
     }
 
-    // Vídeo corto de salto
-    const pageV = await browser.newPage({
-      viewport: { width: 390, height: 844 },
-      recordVideo: { dir: artifactDir, size: { width: 390, height: 844 } },
-    });
-    await pageV.goto(baseUrl, { waitUntil: "networkidle" });
-    await waitFonts(pageV);
-    await pageV.waitForTimeout(T.aparicionRetraso + 400);
-    await pageV.click('nav a[href="#enlaces"]');
-    await pageV.waitForTimeout(tiempoReposo(2) + 300);
-    await pageV.close();
-    const videos = fs.readdirSync(artifactDir).filter((f) => f.endsWith(".webm"));
-    const lastVid = videos.at(-1);
-    if (lastVid) {
-      const dest = path.join(artifactDir, "motion-salto-390.webm");
-      fs.renameSync(path.join(artifactDir, lastVid), dest);
-      console.log(`Vídeo: ${dest}`);
+    async function grabarSalto(width, height, filename) {
+      const pageV = await browser.newPage({
+        viewport: { width, height },
+        recordVideo: { dir: artifactDir, size: { width, height } },
+      });
+      await pageV.goto(baseUrl, { waitUntil: "networkidle" });
+      await waitFonts(pageV);
+      await pageV.waitForTimeout(T.aparicionRetraso + 400);
+      await pageV.click('nav a[href="#enlaces"]');
+      await pageV.waitForTimeout(tiempoReposo(2) + 300);
+      const vidPath = await pageV.video().path();
+      await pageV.close();
+      const dest = path.join(artifactDir, filename);
+      fs.copyFileSync(vidPath, dest);
+      console.log(`Vídeo: ${dest} (${(fs.statSync(dest).size / 1024).toFixed(0)} KB)`);
     }
+
+    await grabarSalto(390, 844, "motion-salto-390.webm");
+    await grabarSalto(1440, 900, "motion-salto-1440.webm");
 
     console.log("\n" + JSON.stringify({ criterios }, null, 2));
   } finally {
