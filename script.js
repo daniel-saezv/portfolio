@@ -420,7 +420,12 @@
       hMin,
       Math.min(0.5 * s + 0.25 * (dist / nS), hCap)
     );
-    const xAdd0 = retarget ? xAddInicio : saltoSinA ? offsetXAddActual() : 0;
+    const xAdd0 =
+      retarget && origen !== "scroll"
+        ? xAddInicio
+        : saltoSinA
+          ? offsetXAddActual()
+          : 0;
     const A = retarget || saltoSinA ? 0 : T.anticipacion;
     saltoSinA = false;
     const llegada = A + nS * T.salto + (nS - 1) * T.contacto;
@@ -452,9 +457,9 @@
     };
     const tSalidaCarril = A + 0.4 * T.salto;
     const tVueltaCarril =
-      A + (nS - 1) * (T.salto + T.contacto) + 0.6 * T.salto;
+      A + (nS - 1) * (T.salto + T.contacto) + 0.99 * T.salto;
     const pSalidaCarril = posSaltoFraccion(0, 0.4);
-    const pVueltaCarril = posSaltoFraccion(nS - 1, 0.6);
+    const pVueltaCarril = posSaltoFraccion(nS - 1, 0.99);
 
     const kV = [{ offset: 0, transform: tr(o), easing: E.cuerda }];
     const kArc = [{ offset: 0, transform: "translateY(0px)", easing: E.cuerda }];

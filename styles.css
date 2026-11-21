@@ -290,13 +290,13 @@ a {
   }
 
   .nav__enlace {
-    padding: 0 var(--e-2);
-    font-size: 0.9375rem;
+    padding: 0 3px;
+    font-size: 0.875rem;
   }
 
   .nav__enlace::after {
-    left: var(--e-2);
-    right: var(--e-2);
+    left: 3px;
+    right: 3px;
   }
 }
 
@@ -315,8 +315,8 @@ a {
   }
 
   .nav__enlace {
-    padding: 0 5px;
-    font-size: 0.875rem;
+    padding: 0 2.5px;
+    font-size: 0.75rem;
   }
 }
 

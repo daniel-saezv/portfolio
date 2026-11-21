@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import {
   startServer,
@@ -26,6 +27,7 @@ import {
   guardarGraficoArco,
 } from "./trajectory-overlay.mjs";
 
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDir = path.join(root, "artifacts");
 const STEP_MS = 2000;
 const NAV_FLOW = [

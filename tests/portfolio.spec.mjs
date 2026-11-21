@@ -88,7 +88,20 @@ async function assertNoHorizontalScroll(page) {
     const dims = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       innerWidth: window.innerWidth,
+      navLeft: Math.min(
+        ...[...document.querySelectorAll(".nav__enlace")].map(
+          (link) => link.getBoundingClientRect().left
+        )
+      ),
+      navRight: Math.max(
+        ...[...document.querySelectorAll(".nav__enlace")].map(
+          (link) => link.getBoundingClientRect().right
+        )
+      ),
     }));
+    if (dims.navLeft < 0 || dims.navRight > dims.innerWidth) {
+      throw new Error(`Navegación cortada: ${JSON.stringify(dims)}`);
+    }
     throw new Error(`Scroll horizontal: ${JSON.stringify(dims)}`);
   }
 }
@@ -232,6 +245,14 @@ async function captureReferenceScreenshot(
     () =>
       document.querySelector("#proyectos .esquema__lista")?.dataset.esquema ===
       "final"
+  );
+  await page.click('nav a[href="#enlaces"]');
+  await page.waitForFunction(
+    () => document.body.dataset.seccionActiva === "enlaces"
+  );
+  await page.click('nav a[href="#proyectos"]');
+  await page.waitForFunction(
+    () => document.body.dataset.seccionActiva === "proyectos"
   );
 
   await page.mouse.move(0, 0);
@@ -428,6 +449,26 @@ async function assertProjectMotion(browser, baseUrl) {
   ) {
     throw new Error("La secuencia del esquema se repitió al volver a vista");
   }
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.waitForFunction(
+    () => !document.documentElement.classList.contains("js-movimiento")
+  );
+  const reducedMid = await page.evaluate(() => ({
+    state: document.querySelector("#proyectos .esquema__lista").dataset.esquema,
+    movementClass: document.documentElement.classList.contains("js-movimiento"),
+    transitions: getComputedStyle(
+      document.querySelector("#proyectos .paso__nodo")
+    ).transitionDuration,
+  }));
+  if (
+    reducedMid.state !== "final" ||
+    reducedMid.movementClass ||
+    reducedMid.transitions !== "0s"
+  ) {
+    throw new Error(
+      `Activar reduced motion no saltó al final: ${JSON.stringify(reducedMid)}`
+    );
+  }
   await page.close();
 
   const focusPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
@@ -460,6 +501,43 @@ async function assertProjectMotion(browser, baseUrl) {
     throw new Error(`Reduced motion inicial inválido: ${JSON.stringify(reduced)}`);
   }
   await reducedPage.close();
+
+  const brotePage = await browser.newPage({
+    viewport: { width: 1280, height: 800 },
+  });
+  await brotePage.goto(baseUrl, { waitUntil: "networkidle" });
+  await brotePage.evaluate(() => {
+    document.dispatchEvent(new CustomEvent("brote:salto"));
+    document.querySelector("#proyectos .esquema").scrollIntoView({
+      block: "center",
+    });
+  });
+  await brotePage.waitForTimeout(100);
+  if (
+    (await brotePage
+      .locator("#proyectos .esquema__lista")
+      .getAttribute("data-esquema")) !== "pendiente"
+  ) {
+    throw new Error("El esquema no esperó a Brote durante su salto");
+  }
+  await brotePage.waitForTimeout(450);
+  if (
+    (await brotePage
+      .locator("#proyectos .esquema__lista")
+      .getAttribute("data-esquema")) !== "final"
+  ) {
+    await brotePage.evaluate(() => {
+      document.dispatchEvent(new CustomEvent("brote:aterrizaje"));
+    });
+  }
+  await brotePage.waitForFunction(
+    () =>
+      document.querySelector("#proyectos .esquema__lista").dataset.esquema ===
+      "final",
+    null,
+    { timeout: 1000 }
+  );
+  await brotePage.close();
 }
 
 async function main() {

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import {
   startServer,
@@ -18,6 +19,7 @@ import {
   panelTrayectoria,
 } from "./trajectory-overlay.mjs";
 
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const artifactDir = path.join(root, "artifacts", "v5");
 const carrilResultados27 = [];
 const H_MIN = { 390: 18, 1440: 24 };
@@ -738,10 +740,8 @@ function detalleRetargetSalidaOFalla(rS, width) {
 async function prepararViajeCarril(page, baseUrl, width) {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await waitAparicionInicial(page);
-  if (width === 390) {
-    await page.click('nav a[href="#habilidades"]');
-    await waitReposoEnSeccion(page, "habilidades", 12000);
-  }
+  await page.click('nav a[href="#habilidades"]');
+  await waitReposoEnSeccion(page, "habilidades", 12000);
 }
 
 async function esperarFaseSalto(page, fase, hasta = null) {

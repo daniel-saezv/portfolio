@@ -7,6 +7,10 @@ cd "$(dirname "$0")/.."
 install_stack() {
   npm ci
   npx playwright install --with-deps chromium
+  if ! command -v ffmpeg >/dev/null 2>&1; then
+    sudo apt-get update
+    sudo apt-get install -y ffmpeg
+  fi
 }
 # --- fin stack ---
 
