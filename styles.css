@@ -1,0 +1,83 @@
+:root {
+  --color-fondo: #fafafa;
+  --color-texto: #1a1a1a;
+  --color-acento: #2563eb;
+  --color-borde-destacada: #2563eb;
+  --fuente-base: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --fuente-titulos: var(--fuente-base);
+  --ancho-max: 42rem;
+  --espacio: 1rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  overflow-x: clip;
+}
+
+body {
+  margin: 0;
+  font-family: var(--fuente-base);
+  color: var(--color-texto);
+  background: var(--color-fondo);
+  line-height: 1.5;
+}
+
+header,
+main,
+footer {
+  max-width: var(--ancho-max);
+  margin-inline: auto;
+  padding: var(--espacio);
+}
+
+header h1 {
+  font-family: var(--fuente-titulos);
+  font-size: 1.5rem;
+  margin: 0 0 var(--espacio);
+}
+
+nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--espacio);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+nav a {
+  color: var(--color-acento);
+}
+
+main section {
+  min-height: 70vh;
+  padding-block: calc(var(--espacio) * 2);
+}
+
+h2 {
+  font-family: var(--fuente-titulos);
+  font-size: 1.25rem;
+}
+
+.lista-habilidades,
+.lista-enlaces {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.habilidad.destacada {
+  font-weight: 600;
+  list-style: none;
+  margin-left: -1.25rem;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--color-borde-destacada);
+}
+
+#mascota:empty {
+  display: none;
+}
