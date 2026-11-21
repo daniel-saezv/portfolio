@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+# --- stack (setup-proyecto) ---
+install_stack() {
+  npm ci
+  npx playwright install --with-deps chromium
+}
+# --- fin stack ---
+
+install_stack
