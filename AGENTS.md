@@ -6,7 +6,7 @@ Página estática de portfolio (HTML, CSS y JS vanilla) desplegada en GitHub Pag
 
 - **Sitio publicado:** `index.html`, `styles.css`, `script.js` (sin build ni dependencias en runtime).
 - **CI:** `.github/workflows/deploy.yml` copia solo esos tres archivos a `_site` y despliega con GitHub Actions.
-- **Pruebas locales:** `tests/portfolio.spec.mjs` (Playwright; no se publica).
+- **Pruebas locales:** `tests/portfolio.spec.mjs` y `tests/motion.spec.mjs` (Playwright; no se publican).
 
 ## Comandos verificados
 

@@ -13,7 +13,7 @@ const MIME = {
   ".js": "text/javascript; charset=utf-8",
 };
 
-const SCROLL_WIDTHS = [375, 390, 640, 1024, 1440];
+const SCROLL_WIDTHS = [320, 375, 390, 640, 1024, 1440];
 const SCREENSHOT_WIDTHS = [390, 1440];
 
 const CONTRAST_PAIRS = [
@@ -117,11 +117,33 @@ async function assertSingleNavActive(page, expectedId) {
   }
 }
 
+async function assertMascotaSinSolapeTitulo(page, sectionId) {
+  const solape = await page.evaluate((id) => {
+    const titulo = document.getElementById(id).querySelector(".titulo-seccion");
+    const m = document.getElementById("mascota");
+    const tr = titulo.getBoundingClientRect();
+    const mr = m.getBoundingClientRect();
+    const pad = parseFloat(getComputedStyle(titulo).paddingTop);
+    const textoTop = tr.top + pad;
+    return Math.max(0, mr.bottom - textoTop - 2);
+  }, sectionId);
+  if (solape > 2) {
+    throw new Error(
+      `Mascota solapa título de ${sectionId} en ${solape.toFixed(1)}px (>2)`
+    );
+  }
+}
+
 async function runNavInteraction(browser, baseUrl, width) {
   const page = await browser.newPage({ viewport: { width, height: 800 } });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.waitForFunction(() => document.fonts.status === "loaded");
+  await page.waitForFunction(
+    () => document.getElementById("mascota")?.dataset.estado === "reposo",
+    null,
+    { timeout: 8000 }
+  );
 
   await assertNoHorizontalScroll(page);
 
@@ -133,6 +155,12 @@ async function runNavInteraction(browser, baseUrl, width) {
 
   for (const { href, id } of navLinks) {
     await page.click(`nav a[href="${href}"]`);
+    await page.waitForFunction(
+      () => document.getElementById("mascota")?.dataset.estado === "reposo",
+      null,
+      { timeout: 8000 }
+    );
+    await assertMascotaSinSolapeTitulo(page, id);
     await page.waitForFunction(
       (sectionId) => document.body.dataset.seccionActiva === sectionId,
       id,

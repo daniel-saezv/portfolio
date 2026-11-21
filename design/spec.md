@@ -291,7 +291,7 @@ Solo estados; el timing es de Sylvanas.
 - Pasa a final cuando el 12% de la sección entra en el viewport (`IntersectionObserver`, una sola vez) o cuando recibe foco.
 - Los estados solo se aplican con la clase `.js` en `<html>` (sin JS el contenido se ve).
 - `prefers-reduced-motion: reduce` → aparece directamente en el estado final, sin transición.
-- En la maqueta hay una transición `.3s linear` marcada **PROVISIONAL – movimiento de Sylvanas**.
+- Transición 480 ms `cubic-bezier(0.22, 1, 0.36, 1)` en opacity y transform, sin stagger (véase `design/motion-spec.md` §11.4.a).
 
 ## 9. Copy
 **Sobre mí** (*propuesta de copy de Jaina, pendiente de visto bueno de Daniel*):
@@ -311,28 +311,11 @@ Solo estados; el timing es de Sylvanas.
 
 ## 10. Huecos pendientes
 - Visto bueno de Daniel a la propuesta de copy de *Sobre mí*.
-- Movimiento (§11), de Sylvanas.
-(Habilidades y URL de LinkedIn ya están resueltas.)
+(Habilidades, URL de LinkedIn y movimiento §11 ya están resueltas; movimiento en `design/motion-spec.md`.)
 
-## 11. Movimiento: pendiente de Sylvanas
-La maqueta solo fija posiciones y estados; todo lo marcado `PROVISIONAL – movimiento de Sylvanas` es sustituible. Lo que tiene que cubrir:
+## 11. Movimiento
 
-**Puntos de anclaje**: uno por sección, en el borde superior izquierdo del título (§8.4): `#sobre-mi .titulo-seccion` (h1), `#habilidades .titulo-seccion` (h2), `#enlaces .titulo-seccion` (h2). Coordenadas de documento: variables CSS `--brote-x` / `--brote-y` en `#brote`.
-
-**Eventos** que emite la maqueta en `#brote` (`CustomEvent`, burbujean):
-| Evento | Cuándo | `detail` |
-|---|---|---|
-| `brote:salto` | cambia la sección activa (no en la colocación inicial) | `{desde, hasta, origen: 'ancla'|'foco'|'scroll'}` |
-| `brote:aterrizaje` | llega al nuevo punto de anclaje | `{seccion}` |
-| `brote:reposo` | queda posada (también al cargar y con reduced-motion) | `{seccion, origen?}` |
-
-**Por definir**:
-1. **Salto entre secciones**: trayectoria (arco) entre dos anclajes que pueden estar a miles de px; qué hace si el destino está fuera del viewport (la maqueta va en línea recta 350ms); cómo encadenar si el usuario cambia de sección a mitad de salto (la maqueta reinicia hacia el nuevo destino).
-2. **Aterrizaje**: duración y curva del aplastado (`scale(1.2,.8)`) y del rebote de hojas (origen en su base, 32px 20px).
-3. **Reposo**: animación idle opcional (respiración, parpadeo con `#brote-ojos`, balanceo de hojas, brillo de `#brote-barriga`), siempre sutil y sin salirse del hueco reservado (tamaño + 8px).
-4. **Entrada de secciones**: duración y curva entre los estados de §8.6.
-5. **prefers-reduced-motion**: la mascota cambia de sitio sin salto ni squash; secciones directamente en estado final; sin animación idle.
-Restricciones: solo CSS/JS nativo (sin librerías), animar solo `transform` y `opacity`, la mascota nunca tapa texto ni recibe eventos.
+La especificación completa de animación (Sylvanas) está en **`design/motion-spec.md`**. Incluye puntos de anclaje, eventos `brote:*`, saltos con Web Animations API, reposo, entradas de sección, `prefers-reduced-motion` y los criterios de aceptación §11.10.
 
 ## 12. Archivos
 - `index.html`: maqueta funcional autocontenida.
