@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Brote, mascota del portfolio">
+  <!-- Brote: semilla-espíritu original. Grupos separables para animación (motion: Sylvanas).
+       Base de las hojas (origen de transformación): (32, 20) en unidades del viewBox. -->
+  <defs>
+    <radialGradient id="brote-brillo-barriga" cx="50%" cy="45%" r="60%">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity=".55"/>
+      <stop offset=".55" stop-color="#A8F0E6" stop-opacity="1"/>
+      <stop offset="1" stop-color="#A8F0E6" stop-opacity=".85"/>
+    </radialGradient>
+  </defs>
+  <g id="brote-hoja-izq" style="transform-box:view-box;transform-origin:32px 20px">
+    <path d="M32 20 C 27 18, 19 15, 16 7 C 24 6, 30 11, 32 20 Z" fill="#3FA36B"/>
+    <path d="M32 20 C 27 15, 22 11, 18 8.5" fill="none" stroke="#8FD694" stroke-width="1" stroke-linecap="round" opacity=".7"/>
+  </g>
+  <g id="brote-hoja-der" style="transform-box:view-box;transform-origin:32px 20px">
+    <path d="M32 20 C 35 17, 41 12, 49 12 C 46 19, 39 21, 32 20 Z" fill="#3FA36B"/>
+    <path d="M32 20 C 37 17, 42 14, 47 13" fill="none" stroke="#8FD694" stroke-width="1" stroke-linecap="round" opacity=".7"/>
+  </g>
+  <g id="brote-cuerpo">
+    <path d="M32 19 C 46 19, 54 29, 54 40 C 54 52, 44 60, 32 60 C 20 60, 10 52, 10 40 C 10 29, 18 19, 32 19 Z" fill="#8FD694"/>
+    <path d="M17 33 C 19 26, 24 22, 30 21.5" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" opacity=".35"/>
+  </g>
+  <g id="brote-barriga">
+    <ellipse cx="32" cy="50" rx="10.5" ry="7.5" fill="url(#brote-brillo-barriga)"/>
+  </g>
+  <g id="brote-ojos">
+    <g id="brote-ojo-izq">
+      <ellipse cx="24.5" cy="36" rx="4" ry="4.8" fill="#0B2A22"/>
+      <circle cx="26" cy="34.2" r="1.6" fill="#FFFFFF"/>
+      <circle cx="23.4" cy="38" r=".7" fill="#FFFFFF" opacity=".8"/>
+    </g>
+    <g id="brote-ojo-der">
+      <ellipse cx="39.5" cy="36" rx="4" ry="4.8" fill="#0B2A22"/>
+      <circle cx="41" cy="34.2" r="1.6" fill="#FFFFFF"/>
+      <circle cx="38.4" cy="38" r=".7" fill="#FFFFFF" opacity=".8"/>
+    </g>
+  </g>
+  <g id="brote-mejillas" fill="#F2C14E" opacity=".85">
+    <ellipse cx="18.5" cy="42.5" rx="3.2" ry="2"/>
+    <ellipse cx="45.5" cy="42.5" rx="3.2" ry="2"/>
+  </g>
+</svg>

@@ -13,6 +13,49 @@ const MIME = {
   ".js": "text/javascript; charset=utf-8",
 };
 
+const SCROLL_WIDTHS = [375, 390, 640, 1024, 1440];
+const SCREENSHOT_WIDTHS = [390, 1440];
+
+const CONTRAST_PAIRS = [
+  { name: "bruma-50 sobre selva-800", fg: "#F3F7EF", bg: "#14453A", min: 4.5 },
+  { name: "laguna-200 sobre selva-800", fg: "#A8F0E6", bg: "#14453A", min: 4.5 },
+  { name: "piedra-300 sobre selva-800", fg: "#B4B9A6", bg: "#14453A", min: 4.5 },
+  { name: "sol-400 sobre selva-800", fg: "#F2C14E", bg: "#14453A", min: 4.5 },
+  { name: "laguna-400 sobre selva-800", fg: "#2EC4B6", bg: "#14453A", min: 4.5 },
+];
+
+function relativeLuminance(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = ((n >> 16) & 255) / 255;
+  const g = ((n >> 8) & 255) / 255;
+  const b = (n & 255) / 255;
+  const lin = (c) =>
+    c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  const [lr, lg, lb] = [lin(r), lin(g), lin(b)];
+  return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+}
+
+function contrastRatio(fg, bg) {
+  const l1 = relativeLuminance(fg);
+  const l2 = relativeLuminance(bg);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function verifyContrast() {
+  const results = CONTRAST_PAIRS.map((pair) => {
+    const ratio = contrastRatio(pair.fg, pair.bg);
+    const ok = ratio >= pair.min;
+    return { ...pair, ratio: Number(ratio.toFixed(2)), ok };
+  });
+  const failed = results.filter((r) => !r.ok);
+  if (failed.length) {
+    throw new Error(`Contraste insuficiente: ${JSON.stringify(failed)}`);
+  }
+  return results;
+}
+
 function startServer() {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
@@ -24,7 +67,9 @@ function startServer() {
         return;
       }
       const ext = path.extname(filePath);
-      res.writeHead(200, { "Content-Type": MIME[ext] || "application/octet-stream" });
+      res.writeHead(200, {
+        "Content-Type": MIME[ext] || "application/octet-stream",
+      });
       fs.createReadStream(filePath).pipe(res);
     });
     server.listen(0, "127.0.0.1", () => {
@@ -47,9 +92,36 @@ async function assertNoHorizontalScroll(page) {
   }
 }
 
-async function runViewport(browser, baseUrl, width, artifactDir) {
+async function assertSingleNavActive(page, expectedId) {
+  const estado = await page.evaluate(() => {
+    const currents = [...document.querySelectorAll('.nav__enlace[aria-current="true"]')];
+    return {
+      seccionActiva: document.body.dataset.seccionActiva,
+      currentHrefs: currents.map((a) => a.getAttribute("href")),
+    };
+  });
+  if (estado.seccionActiva !== expectedId) {
+    throw new Error(
+      `data-seccion-activa=${estado.seccionActiva}, esperado ${expectedId}`
+    );
+  }
+  if (estado.currentHrefs.length !== 1) {
+    throw new Error(
+      `aria-current en ${estado.currentHrefs.length} enlaces: ${estado.currentHrefs.join(", ")}`
+    );
+  }
+  if (estado.currentHrefs[0] !== `#${expectedId}`) {
+    throw new Error(
+      `aria-current en ${estado.currentHrefs[0]}, esperado #${expectedId}`
+    );
+  }
+}
+
+async function runNavInteraction(browser, baseUrl, width) {
   const page = await browser.newPage({ viewport: { width, height: 800 } });
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await page.waitForFunction(() => document.fonts.status === "loaded");
 
   await assertNoHorizontalScroll(page);
 
@@ -66,31 +138,64 @@ async function runViewport(browser, baseUrl, width, artifactDir) {
       id,
       { timeout: 5000 }
     );
-    const inView = await page.evaluate((sectionId) => {
-      const el = document.getElementById(sectionId);
-      const rect = el.getBoundingClientRect();
-      return rect.top >= 0 && rect.top < window.innerHeight * 0.6;
-    }, id);
-    if (!inView) {
-      throw new Error(`La sección ${id} no quedó visible tras el nav (${width}px)`);
-    }
+    await page.waitForFunction(
+      (sectionId) => {
+        const el = document.getElementById(sectionId);
+        const rect = el.getBoundingClientRect();
+        return rect.top >= 0 && rect.top < window.innerHeight * 0.6;
+      },
+      id,
+      { timeout: 5000 }
+    );
+    await assertSingleNavActive(page, id);
   }
 
-  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.evaluate(() => {
+    window.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+    window.scrollTo(0, document.body.scrollHeight);
+  });
   await page.waitForFunction(
     () => document.body.dataset.seccionActiva === "enlaces",
     null,
     { timeout: 5000 }
   );
+  await assertSingleNavActive(page, "enlaces");
 
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => {
+    window.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+    window.scrollTo(0, 0);
+  });
   await page.waitForFunction(
     () => document.body.dataset.seccionActiva === "sobre-mi",
     null,
     { timeout: 5000 }
   );
+  await assertSingleNavActive(page, "sobre-mi");
 
   await assertNoHorizontalScroll(page);
+  await page.close();
+}
+
+/** Captura alineada con design/capturas: carga inicial, sin hover residual del test. */
+async function captureReferenceScreenshot(browser, baseUrl, width, artifactDir) {
+  const page = await browser.newPage({ viewport: { width, height: 800 } });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await page.waitForFunction(() => document.fonts.status === "loaded");
+  await page.waitForFunction(
+    () => document.body.dataset.seccionActiva === "sobre-mi",
+    null,
+    { timeout: 5000 }
+  );
+  await assertSingleNavActive(page, "sobre-mi");
+  await assertNoHorizontalScroll(page);
+
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
 
   const shot = path.join(artifactDir, `portfolio-${width}px.png`);
   await page.screenshot({ path: shot, fullPage: true });
@@ -102,22 +207,64 @@ async function main() {
   const artifactDir = "/opt/cursor/artifacts";
   fs.mkdirSync(artifactDir, { recursive: true });
 
+  const contrast = verifyContrast();
+  console.log("Contraste WCAG (pares de spec.md):");
+  contrast.forEach((c) => {
+    console.log(`  ${c.name}: ${c.ratio}:1 — ${c.ok ? "AA ✔" : "FAIL"}`);
+  });
+
   const { server, baseUrl } = await startServer();
   const browser = await chromium.launch();
 
-  const results = [];
+  const scrollResults = [];
+  const screenshotResults = [];
+
   try {
-    for (const w of [375, 1440]) {
-      const shot = await runViewport(browser, baseUrl, w, artifactDir);
-      results.push({ width: w, screenshot: shot, ok: true });
-      console.log(`OK viewport ${w}px -> ${shot}`);
+    for (const w of SCROLL_WIDTHS) {
+      const page = await browser.newPage({ viewport: { width: w, height: 800 } });
+      await page.goto(baseUrl, { waitUntil: "networkidle" });
+      await assertNoHorizontalScroll(page);
+      const dims = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+      }));
+      scrollResults.push({ width: w, ...dims, ok: true });
+      console.log(
+        `OK scroll horizontal ${w}px (scrollWidth=${dims.scrollWidth}, innerWidth=${dims.innerWidth})`
+      );
+      await page.close();
+    }
+
+    await runNavInteraction(browser, baseUrl, 375);
+    console.log("OK viewport interactivo 375px");
+
+    for (const w of SCREENSHOT_WIDTHS) {
+      const shot = await captureReferenceScreenshot(
+        browser,
+        baseUrl,
+        w,
+        artifactDir
+      );
+      screenshotResults.push({ width: w, screenshot: shot });
+      console.log(`OK captura referencia ${w}px -> ${shot}`);
     }
   } finally {
     await browser.close();
     server.close();
   }
 
-  console.log(JSON.stringify({ passed: true, results }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        passed: true,
+        contrast,
+        scrollResults,
+        screenshotResults,
+      },
+      null,
+      2
+    )
+  );
 }
 
 main().catch((err) => {
