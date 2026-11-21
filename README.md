@@ -1,29 +1,51 @@
-# portfolio
+# Portfolio
 
-## Agentes y skills
+Sitio estático personal de **Daniel Saez**: presentación, trayectoria y enlaces. Publicado en [https://daniel-saezv.github.io/portfolio/](https://daniel-saezv.github.io/portfolio/).
 
-`AGENTS.md` y `.agents/skills/` son la fuente de instrucciones para agentes en Cursor, Copilot, Codex y Gemini CLI. Claude Code lee las mismas skills vía `.claude/skills/`. `.github/copilot-instructions.md` es un enlace simbólico a `AGENTS.md`.
+## Stack
 
-Hay dos clases de skills:
+HTML, CSS y JavaScript vanilla en la raíz del repositorio. No hay paso de build ni dependencias en runtime; solo Playwright como dependencia de desarrollo para las pruebas.
 
-1. **Instaladas desde pstack** (inglés, instalador oficial): `blast-radius`, `correct`, `principle-prove-it-works`, `tdd` y `unslop`. Se añaden o actualizan con el CLI [`skills`](https://github.com/vercel-labs/skills), por ejemplo:
+## Ver en local
 
-   ```bash
-   npx skills add cursor/plugins --skill tdd -a cursor -a github-copilot -a codex -a gemini-cli -a claude-code -y
-   ```
-
-   Esas skills pueden nombrar otras de pstack que no vienen en el repositorio (por ejemplo, `blast-radius` menciona `why` y `arena`). Si las necesitas, instálalas con `npx skills add cursor/plugins --skill <nombre>` o con `/add-plugin pstack` en Cursor.
-
-2. **Propias del repositorio** (español): `setup-proyecto`, `pr-lista`, `technical-writing` y `how`. Viven en `.agents/skills/`; para que Claude Code las vea, mantén los enlaces en `.claude/skills/` apuntando a `.agents/skills/<nombre>`.
-
-Para actualizar las skills bloqueadas en `skills-lock.json`:
+Desde la raíz del repositorio, sirve los archivos con cualquier servidor estático. Por ejemplo:
 
 ```bash
-npx skills update -y
+python3 -m http.server 8080
 ```
 
-Revisa el diff, valida con `npx skills check` y commitea `.agents/skills/`, `.claude/skills/` y `skills-lock.json`.
+Abre [http://localhost:8080](http://localhost:8080).
 
-### Créditos
+## Pruebas
 
-Skills de [pstack](https://github.com/cursor/plugins/tree/main/pstack) por Lauren Tan (licencia MIT), instaladas con el instalador oficial. Las adaptaciones en español `how` y `technical-writing` derivan del mismo origen; ver `.agents/skills/LICENSE`.
+Instala el navegador de Playwright (una vez) y ejecuta la suite:
+
+```bash
+npx --yes playwright install chromium
+npm test
+```
+
+El script `test` de `package.json` ejecuta, en este orden, `tests/portfolio.spec.mjs`, `tests/motion.spec.mjs` y `tests/motion-render.spec.mjs`.
+
+## Estructura
+
+| Ruta | Uso |
+| --- | --- |
+| `index.html` | Página publicada |
+| `styles.css` | Estilos publicados |
+| `script.js` | Comportamiento publicado |
+| `design/` | Especificaciones, SVG y capturas de referencia (no se despliegan) |
+| `tests/` | Pruebas Playwright (no se publican) |
+
+## Despliegue
+
+El workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) (`Desplegar en GitHub Pages`) se dispara en cada push a `main` o manualmente (`workflow_dispatch`).
+
+1. **build:** copia `index.html`, `styles.css` y `script.js` a `_site/`, configura GitHub Pages y sube el artefacto.
+2. **deploy:** publica el artefacto en el entorno `github-pages`.
+
+GitHub Pages debe tener como origen **GitHub Actions** en la configuración del repositorio.
+
+---
+
+Las instrucciones para agentes de código están en [`AGENTS.md`](AGENTS.md).
