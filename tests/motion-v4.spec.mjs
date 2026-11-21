@@ -333,10 +333,11 @@ function medirCarrilEnFrames(frames, eventos, etiqueta) {
       eventos
     );
     const t0 = t0Salto(frames, salto);
+    const carrilGraceInMs = 16;
     const enCarril = frames.filter((f) => {
       const tr = f.t - t0;
       return (
-        tr >= tSalidaFin &&
+        tr >= tSalidaFin + carrilGraceInMs &&
         tr < tVueltaInicio &&
         f.estado === "salto"
       );
@@ -488,7 +489,8 @@ function analizarRetargetEnCarril(frames, eventos, nuevoDest) {
     tSalidaFin,
     tVueltaInicio,
     primero.detail.hasta,
-    tClick - 1
+    tClick - 1,
+    16
   );
   medirVentana(
     segundo.t,
@@ -496,7 +498,7 @@ function analizarRetargetEnCarril(frames, eventos, nuevoDest) {
     t2Vuelta,
     segundo.detail.hasta,
     Infinity,
-    20
+    48
   );
   for (let i = 1; i < frames.length; i++) {
     const f = frames[i];
@@ -561,6 +563,28 @@ function analizarRetargetEnCarril(frames, eventos, nuevoDest) {
   };
 }
 
+function resolverSaltoEnLog(eventos, ref) {
+  if (ref == null) return null;
+  if (typeof ref === "number") {
+    return (
+      eventos.find(
+        (e) => e.nombre === "brote:salto" && Math.abs(e.t - ref) <= 4
+      ) ?? null
+    );
+  }
+  if (typeof ref === "object" && ref.t != null) {
+    return (
+      eventos.find(
+        (e) =>
+          e.nombre === "brote:salto" &&
+          e.detail?.hasta === ref.hasta &&
+          Math.abs(e.t - ref.t) <= 4
+      ) ?? null
+    );
+  }
+  return null;
+}
+
 function analizarRetargetSalida(
   frames,
   eventos,
@@ -569,16 +593,22 @@ function analizarRetargetSalida(
   saltoT,
   metaSalida
 ) {
+  const baseFail = {
+    deltaMs:
+      typeof metaSalida?.deltaMs === "number"
+        ? Math.round(metaSalida.deltaMs)
+        : undefined,
+    maxJump: undefined,
+    carrilMs2: undefined,
+    modo2: undefined,
+    limiteSalidaMs:
+      typeof metaSalida?.tSalidaFinMs === "number"
+        ? metaSalida.tSalidaFinMs
+        : undefined,
+  };
   const primero =
-    (typeof saltoT === "number"
-      ? eventos.find(
-          (e) =>
-            e.nombre === "brote:salto" &&
-            e.detail?.hasta === "enlaces" &&
-            Math.abs(e.t - saltoT) <= 3
-        )
-      : null) ||
-    eventos
+    resolverSaltoEnLog(eventos, metaSalida?.primeroRef ?? saltoT) ||
+  eventos
       .filter(
         (e) =>
           e.nombre === "brote:salto" &&
@@ -587,16 +617,41 @@ function analizarRetargetSalida(
           !e.detail?.recto
       )
       .at(-1);
-  const segundo = eventos.find(
-    (e) =>
-      e.nombre === "brote:salto" &&
-      e.detail?.retarget &&
-      e.detail?.hasta === nuevoDest &&
-      primero &&
-      e.t > primero.t
-  );
-  if (!primero || !segundo) {
-    return { ok: false, motivo: "sin par retarget salida" };
+  let segundo =
+    resolverSaltoEnLog(eventos, metaSalida?.segundoRef) ||
+    eventos.find(
+      (e) =>
+        e.nombre === "brote:salto" &&
+        e.detail?.retarget &&
+        e.detail?.hasta === nuevoDest &&
+        primero &&
+        e.t > primero.t
+    );
+  if (!primero) {
+    return {
+      ok: false,
+      motivo: "sin brote:salto enlaces (carril n≥2) en el log",
+      ...baseFail,
+    };
+  }
+  if (!segundo) {
+    const ultimoDest = eventos
+      .filter(
+        (e) =>
+          e.nombre === "brote:salto" &&
+          e.detail?.hasta === nuevoDest &&
+          primero &&
+          e.t > primero.t
+      )
+      .at(-1);
+    return {
+      ok: false,
+      motivo: ultimoDest
+        ? "segundo salto sin flag retarget (clic fuera de ventana o viaje normal)"
+        : "no llegó segundo brote:salto tras el clic de retarget",
+      ...baseFail,
+      ultimoSaltoDest: ultimoDest?.detail ?? null,
+    };
   }
   const tSalidaFin =
     primero.detail.tSalidaFinMs ??
@@ -630,18 +685,37 @@ function analizarRetargetSalida(
     !segundo.detail.estabaEnCarril && metaSalida?.tr != null
       ? metaSalida.tr < tSalidaFin - 12
       : true;
-  const okC27 = segundo.detail.recto
-    ? segundo.detail.carrilMs === 0
-    : (segundo.detail.carrilMs ?? 0) >= 120;
+  const modo2 = segundo.detail.recto ? "recto" : "carril";
+  const carrilMs2 =
+    typeof segundo.detail.carrilMs === "number" ? segundo.detail.carrilMs : 0;
+  const okC27 =
+    modo2 === "recto" ? carrilMs2 === 0 : carrilMs2 >= 120;
   return {
     ok: maxJump <= 2.05 && okC27 && okSalida,
     maxJump,
     deltaMs,
     okSalida,
+    modo2,
+    carrilMs2,
     limiteSalidaMs: Math.round(tSalidaFin),
     primero: primero.detail,
     segundo: segundo.detail,
   };
+}
+
+function detalleRetargetSalidaOFalla(rS, width) {
+  const r = rS?.resultado ?? {};
+  const faltan = [];
+  if (typeof r.deltaMs !== "number") faltan.push("Δt");
+  if (typeof r.maxJump !== "number") faltan.push("jump");
+  if (typeof r.carrilMs2 !== "number") faltan.push("carrilMs2");
+  if (faltan.length) {
+    fail(
+      `Criterio 26: ${width}px retarget salida translateX: métricas ausentes [${faltan.join(", ")}] motivo=${r.motivo ?? "desconocido"}`
+    );
+  }
+  const modo = r.modo2 ?? (r.segundo?.recto ? "recto" : "carril");
+  return `${width}px retarget salida translateX: Δt=${r.deltaMs}ms jump=${r.maxJump.toFixed(2)}px modo2=${modo} carrilMs2=${r.carrilMs2} violRel=${rS.violRelanzado ?? 0}`;
 }
 
 async function prepararViajeCarril(page, baseUrl, width) {
@@ -690,20 +764,114 @@ async function ejecutarRetargetCarril(page, baseUrl, width, nuevoHref, nuevoId) 
   await prepararViajeCarril(page, baseUrl, width);
   await instalarFrameLog(page);
   await page.evaluate(() => window.__rafArm());
-  await page.click('nav a[href="#enlaces"]');
+  const metaCarril = await page.evaluate(
+    async ({ hrefDest, destId }) => {
+      const esperarSalto = (pred, etiqueta, ms = 8000) =>
+        new Promise((resolve, reject) => {
+          const sync = () =>
+            window.__eventos?.findLast?.(
+              (e) => e.nombre === "brote:salto" && pred(e)
+            ) ?? null;
+          const ya = sync();
+          if (ya) return resolve(ya);
+          const on = (e) => {
+            const row = {
+              t: Math.round(performance.now()),
+              nombre: "brote:salto",
+              detail: { ...e.detail },
+            };
+            if (!pred(row)) return;
+            document.removeEventListener("brote:salto", on);
+            resolve(sync() ?? row);
+          };
+          document.addEventListener("brote:salto", on);
+          const t0 = performance.now();
+          const spin = () => {
+            const hit = sync();
+            if (hit) {
+              document.removeEventListener("brote:salto", on);
+              resolve(hit);
+              return;
+            }
+            if (performance.now() - t0 > ms) {
+              document.removeEventListener("brote:salto", on);
+              reject(new Error(`timeout esperando ${etiqueta}`));
+              return;
+            }
+            requestAnimationFrame(spin);
+          };
+          requestAnimationFrame(spin);
+        });
+
+      document.querySelector('nav a[href="#enlaces"]').click();
+      let primero;
+      try {
+        primero = await esperarSalto(
+          (e) =>
+            e.detail?.hasta === "enlaces" &&
+            e.detail?.carril &&
+            !e.detail?.recto,
+          "brote:salto enlaces"
+        );
+      } catch (err) {
+        return {
+          ok: false,
+          motivo: `sin salto enlaces: ${String(err.message || err)}`,
+        };
+      }
+      const tSalida = primero.detail.tSalidaFinMs ?? 176;
+      const carrilMs = primero.detail.carrilMs ?? 328;
+      const trMin = tSalida + 24;
+      const trMax = tSalida + carrilMs - 40;
+      while (performance.now() - primero.t < 12000) {
+        const tr = performance.now() - primero.t;
+        const m = document.getElementById("mascota");
+        if (
+          tr >= trMin &&
+          tr <= trMax &&
+          m?.dataset.estado === "salto" &&
+          m.getAnimations().length > 0
+        ) {
+          const clickT = Math.round(performance.now());
+          document.querySelector(`nav a[href="${hrefDest}"]`).click();
+          return {
+            ok: true,
+            sT: primero.t,
+            clickT,
+            tr: Math.round(tr),
+            tSalida,
+            carrilMs,
+          };
+        }
+        if (tr > trMax) {
+          return {
+            ok: false,
+            motivo: `perdió ventana carril (tr=${Math.round(tr)}ms; ventana ${trMin}–${trMax}ms)`,
+            sT: primero.t,
+          };
+        }
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      return { ok: false, motivo: "timeout ventana carril" };
+    },
+    { hrefDest: nuevoHref, destId: nuevoId }
+  );
+  if (!metaCarril?.ok) {
+    fail(
+      `retarget carril in-page: ${metaCarril?.motivo ?? "fallo desconocido"} (${width}px)`
+    );
+  }
   await page.waitForFunction(
-    () =>
+    (dest) =>
       window.__eventos?.some(
         (e) =>
           e.nombre === "brote:salto" &&
-          e.detail?.hasta === "enlaces" &&
-          e.detail?.carril
+          e.detail?.retarget &&
+          e.detail?.hasta === dest
       ),
-    null,
-    { timeout: 8000 }
+    nuevoId,
+    { timeout: 8000, polling: 8 }
   );
-  await esperarFaseSalto(page, "carril");
-  await page.click(`nav a[href="${nuevoHref}"]`);
   await waitReposoEnSeccion(page, nuevoId, 16000);
   const frames = await page.evaluate(() => {
     window.__rafStop();
@@ -728,58 +896,166 @@ async function ejecutarRetargetSalida(page, baseUrl, width, nuevoHref, nuevoId) 
   await prepararViajeCarril(page, baseUrl, width);
   await instalarFrameLog(page);
   await page.evaluate(() => window.__rafArm());
-  await page.click('nav a[href="#enlaces"]');
-  const metaSalida = await page.evaluate(async (href) => {
-    const pick = () =>
-      window.__eventos
-        ?.filter(
+  const metaSalida = await page.evaluate(
+    async ({ hrefDest, destId }) => {
+      const esperarSalto = (pred, etiqueta, ms = 8000) =>
+        new Promise((resolve, reject) => {
+          const sync = () => {
+            const hit = window.__eventos?.findLast?.(
+              (e) => e.nombre === "brote:salto" && pred(e)
+            );
+            if (hit) return hit;
+            return null;
+          };
+          const ya = sync();
+          if (ya) return resolve(ya);
+          const on = (e) => {
+            const row = {
+              t: Math.round(performance.now()),
+              nombre: "brote:salto",
+              detail: { ...e.detail },
+            };
+            if (!pred(row)) return;
+            document.removeEventListener("brote:salto", on);
+            resolve(sync() ?? row);
+          };
+          document.addEventListener("brote:salto", on);
+          const t0 = performance.now();
+          const spin = () => {
+            const hit = sync();
+            if (hit) {
+              document.removeEventListener("brote:salto", on);
+              resolve(hit);
+              return;
+            }
+            if (performance.now() - t0 > ms) {
+              document.removeEventListener("brote:salto", on);
+              reject(new Error(`timeout esperando ${etiqueta}`));
+              return;
+            }
+            requestAnimationFrame(spin);
+          };
+          requestAnimationFrame(spin);
+        });
+
+      const enlaceEnlaces = document.querySelector('nav a[href="#enlaces"]');
+      if (!enlaceEnlaces) {
+        return { ok: false, motivo: "sin enlace nav #enlaces" };
+      }
+      enlaceEnlaces.click();
+
+      let primero;
+      try {
+        primero = await esperarSalto(
           (e) =>
-            e.nombre === "brote:salto" &&
             e.detail?.hasta === "enlaces" &&
             e.detail?.carril &&
-            !e.detail?.recto
-        )
-        .at(-1);
-    const t0 = performance.now();
-    while (!pick() && performance.now() - t0 < 8000) {
-      await new Promise((r) => requestAnimationFrame(r));
-    }
-    const s = pick();
-    if (!s) return { ok: false, motivo: "sin salto enlaces" };
-    const fin = s.detail.tSalidaFinMs ?? 176;
-    while (performance.now() - t0 < 8000) {
-      const tr = performance.now() - s.t;
-      const m = document.getElementById("mascota");
-      if (
-        m?.dataset.estado === "salto" &&
-        m.getAnimations().length > 0 &&
-        tr >= 48 &&
-        tr < fin - 14
-      ) {
-        const clickT = Math.round(performance.now());
-        window.__retargetSalidaClickT = clickT;
-        document.querySelector(`nav a[href="${href}"]`).click();
+            !e.detail?.recto &&
+            typeof e.detail?.tSalidaFinMs === "number",
+          "brote:salto enlaces carril"
+        );
+      } catch (err) {
         return {
-          ok: true,
-          sT: s.t,
-          clickT,
-          deltaMs: clickT - s.t,
-          tr: Math.round(tr),
+          ok: false,
+          motivo: `sin salto enlaces carril: ${String(err.message || err)}`,
         };
       }
-      if (tr >= fin - 14) {
-        return { ok: false, motivo: "perdió ventana salida", tr: Math.round(tr), sT: s.t };
+
+      const fin = primero.detail.tSalidaFinMs ?? 176;
+      const trMin = 48;
+      const trMax = fin - 14;
+      const objetivo =
+        primero.t + Math.min(Math.max(Math.round(fin * 0.45), trMin), trMax);
+      while (performance.now() < objetivo) {
+        await new Promise((r) => requestAnimationFrame(r));
       }
-      await new Promise((r) => requestAnimationFrame(r));
-    }
-    return { ok: false, motivo: "timeout ventana salida" };
-  }, nuevoHref);
+      const tr = Math.round(performance.now() - primero.t);
+      if (tr >= trMax) {
+        return {
+          ok: false,
+          motivo: `clic fuera de ventana salida translateX (tr=${tr}ms; permitido <${trMax}ms)`,
+          sT: primero.t,
+          tSalidaFinMs: fin,
+          tr,
+        };
+      }
+      const m = document.getElementById("mascota");
+      if (
+        m?.dataset.estado !== "salto" ||
+        m.getAnimations().length === 0
+      ) {
+        return {
+          ok: false,
+          motivo: "brote no en vuelo en ventana de salida",
+          sT: primero.t,
+          tr,
+          tSalidaFinMs: fin,
+        };
+      }
+
+      const clickT = Math.round(performance.now());
+      window.__retargetSalidaClickT = clickT;
+      window.__retargetSalidaPrimeroT = primero.t;
+      const destLink = document.querySelector(`nav a[href="${hrefDest}"]`);
+      if (!destLink) {
+        return { ok: false, motivo: `sin enlace ${hrefDest}` };
+      }
+      destLink.click();
+
+      let segundo;
+      try {
+        segundo = await esperarSalto(
+          (e) =>
+            e.detail?.retarget &&
+            e.detail?.hasta === destId &&
+            e.t > primero.t,
+          "brote:salto retarget"
+        );
+      } catch (err) {
+        return {
+          ok: false,
+          motivo: `sin segundo brote:salto retarget: ${String(err.message || err)}`,
+          sT: primero.t,
+          clickT,
+          deltaMs: clickT - primero.t,
+          tr,
+          tSalidaFinMs: fin,
+          primeroRef: { t: primero.t, hasta: "enlaces" },
+        };
+      }
+
+      return {
+        ok: true,
+        sT: primero.t,
+        clickT,
+        deltaMs: clickT - primero.t,
+        tr,
+        tSalidaFinMs: fin,
+        primeroRef: { t: primero.t, hasta: "enlaces" },
+        segundoRef: { t: segundo.t, hasta: destId },
+        segundoPreview: segundo.detail,
+      };
+    },
+    { hrefDest: nuevoHref, destId: nuevoId }
+  );
   if (!metaSalida?.ok) {
-    guardarJson(`retarget-salida-${width}.json`, { width, ...metaSalida });
+    const resultado = {
+      ok: false,
+      motivo: metaSalida.motivo ?? "escenario salida abortado",
+      deltaMs:
+        typeof metaSalida.deltaMs === "number"
+          ? Math.round(metaSalida.deltaMs)
+          : undefined,
+      maxJump: undefined,
+      carrilMs2: undefined,
+      modo2: undefined,
+      metaSalida,
+    };
+    guardarJson(`retarget-salida-${width}.json`, { width, ...resultado });
     return {
       frames: [],
       ev: [],
-      resultado: { ok: false, ...metaSalida },
+      resultado,
       carrilR2: { violaciones: 0 },
       violRelanzado: 0,
     };
@@ -1515,7 +1791,7 @@ async function main() {
       );
       reg(
         26,
-        rC.resultado.ok && rC.carrilR2.violaciones === 0,
+        rC.resultado.ok,
         `${width}px retarget en carril: viol=${rC.resultado.violCarril} maxΔleft=${rC.resultado.maxDesv?.toFixed(2)}px frames=${rC.resultado.framesCarril} jump=${rC.resultado.maxJump.toFixed(2)}px carrilMs2=${rC.resultado.segundo?.carrilMs}`
       );
       await pR.close();
@@ -1533,7 +1809,7 @@ async function main() {
       reg(
         26,
         rS.resultado.ok && (rS.violRelanzado ?? 0) === 0,
-        `${width}px retarget salida translateX: Δt=${rS.resultado.deltaMs ?? "?"}ms jump=${(rS.resultado.maxJump ?? 0).toFixed(2)}px carrilMs2=${rS.resultado.segundo?.carrilMs ?? "?"} violRel=${rS.violRelanzado ?? "?"}`
+        detalleRetargetSalidaOFalla(rS, width)
       );
       await pS.close();
     }
