@@ -176,7 +176,9 @@ export async function instalarMuestreoSalto(page, intervalMs = 33) {
         const m = document.getElementById("mascota");
         const r = m.getBoundingClientRect();
         const s = m.offsetWidth || r.width;
-        const cy = r.top + s / 2;
+        const cy = window.__cyMascota
+          ? window.__cyMascota(m)
+          : r.top + s / 2;
         window.__tray.push({
           t: performance.now(),
           left: r.left,
@@ -186,6 +188,7 @@ export async function instalarMuestreoSalto(page, intervalMs = 33) {
           h: r.height,
           cx: r.left + r.width / 2,
           cy,
+          arcY: window.__arcY ? window.__arcY(m) : undefined,
           estado: m.dataset.estado,
         });
         window.__trayTimer = setTimeout(tick, ms);
@@ -444,7 +447,28 @@ export function nSaltosDesdeSalto(salto) {
   return n;
 }
 
-export function medirArcosSaltos(samples, salto) {
+function arcosDesdeTranslateY(samples, n, saltoT, A = 80) {
+  if (!samples.some((s) => s.arcY != null && s.estado === "salto")) return null;
+  const Ts = 240;
+  const Tc = 40;
+  const arcs = [];
+  for (let i = 0; i < n; i++) {
+    const phaseStart = saltoT + A + i * (Ts + Tc);
+    const phaseEnd = phaseStart + Ts;
+    const chunk = samples.filter(
+      (s) =>
+        s.estado === "salto" &&
+        s.t >= phaseStart - 20 &&
+        s.t <= phaseEnd + 20 &&
+        s.arcY != null
+    );
+    if (!chunk.length) continue;
+    arcs.push(Math.round(Math.max(...chunk.map((s) => s.arcY)) * 10) / 10);
+  }
+  return arcs.filter((a) => a > 0.2);
+}
+
+export function medirArcosSaltos(samples, salto, opts = {}) {
   const n =
     typeof salto?.detail?.n === "number" && salto.detail.n > 0
       ? salto.detail.n
@@ -454,6 +478,16 @@ export function medirArcosSaltos(samples, salto) {
     typeof salto?.detail?.h === "number" && salto.detail.h > 0
       ? salto.detail.h
       : 0;
+  let A = 80;
+  if (opts.aterrizajeT != null && salto?.t != null) {
+    const core = n * 240 + (n - 1) * 40;
+    A = Math.max(0, Math.round(opts.aterrizajeT - salto.t - core));
+  }
+  const arcsY = arcosDesdeTranslateY(samples, n, saltoT, A);
+  if (arcsY?.length === n) {
+    const max = Math.round(Math.max(...arcsY) * 10) / 10;
+    return { arcs: arcsY, max, n };
+  }
   const arcs = arcosPorSaltitosAnimacion(samples, n, saltoT, hRef);
   if (arcs.length < n) {
     const pts = compensarScroll(muestrasArco(samples));

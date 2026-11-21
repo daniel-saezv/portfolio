@@ -83,6 +83,19 @@
     };
   }
 
+  function xTextoDoc(seccionId) {
+    const t = document
+      .getElementById(seccionId)
+      .querySelector(".titulo-seccion");
+    return t.getBoundingClientRect().left + scrollX;
+  }
+
+  function offsetXAddActual() {
+    const r = mascota.getBoundingClientRect();
+    const a = posDocDesdeCss();
+    return Math.round(r.left + scrollX - a.x);
+  }
+
   const tr = (p) => `translate(${p.x}px, ${p.y}px)`;
 
   function fijar(p) {
@@ -130,6 +143,7 @@
     const a0D = ang(hojaD);
     const opac = parseFloat(getComputedStyle(mascota).opacity) || 1;
     const retarget = viajando;
+    const xAddInicio = viajando ? offsetXAddActual() : 0;
     cancelar();
     const o0 = { x: mV.e, y: mV.f };
     fijar(o0);
@@ -199,16 +213,29 @@
       hMin,
       Math.min(0.5 * s + 0.25 * (dist / nS), hCap)
     );
-    const A = retarget ? 0 : T.anticipacion;
+    const xAdd0 = retarget ? xAddInicio : saltoSinA ? offsetXAddActual() : 0;
+    const A = retarget || saltoSinA ? 0 : T.anticipacion;
+    saltoSinA = false;
     const llegada = A + nS * T.salto + (nS - 1) * T.contacto;
     const total = llegada + T.hojas;
     const off = (t) => t / total;
     const sc = ([x, y]) => `scale(${x}, ${y})`;
 
+    const xTexto = xTextoDoc(hasta);
+    const xCarril = Math.max(4, xTexto - s - 8);
+    const laneDx = Math.round(xCarril - o.x);
+  const tSalidaCarril = A + 0.4 * T.salto;
+    const tVueltaCarril =
+      A + (nS - 1) * (T.salto + T.contacto) + 0.6 * T.salto;
+
     const kV = [{ offset: 0, transform: tr(o), easing: E.cuerda }];
+    const kArc = [{ offset: 0, transform: "translateY(0px)", easing: E.cuerda }];
+    const kX = [{ offset: 0, transform: `translateX(${xAdd0}px)` }];
     const kF = [{ offset: 0, transform: sc([mF.a, mF.d]), easing: E.anticipa }];
     if (A) {
       kV.push({ offset: off(A), transform: tr(o) });
+      kArc.push({ offset: off(A), transform: "translateY(0px)" });
+      kX.push({ offset: off(A), transform: `translateX(${xAdd0}px)` });
       kF.push({ offset: off(A), transform: sc(F.anticipa) });
     }
     for (let i = 0; i < nS; i++) {
@@ -221,25 +248,25 @@
         x: o.x + (d.x - o.x) * fracEnd,
         y: o.y + (d.y - o.y) * fracEnd,
       };
-      const pApex = {
+      const pMid = {
         x: o.x + (d.x - o.x) * fracMid,
-        y: o.y + (d.y - o.y) * fracMid - h,
+        y: o.y + (d.y - o.y) * fracMid,
       };
       if (i > 0) {
         kV.push({ offset: off(t0), transform: kV.at(-1).transform });
+        kArc.push({ offset: off(t0), transform: "translateY(0px)" });
         kF.push({ offset: off(t0), transform: sc(F.contacto) });
       }
-      kV.at(-1).easing = "linear";
-      kV.push({
+      kV.at(-1).easing = E.cuerda;
+      kV.push({ offset: off(tMid), transform: tr(pMid), easing: E.cuerda });
+      kV.push({ offset: off(t1), transform: tr(p1), easing: E.cuerda });
+      kArc.at(-1).easing = E.subida;
+      kArc.push({
         offset: off(tMid),
-        transform: tr(pApex),
-        easing: "linear",
+        transform: `translateY(${-h}px)`,
+        easing: E.bajada,
       });
-      kV.push({
-        offset: off(t1),
-        transform: tr(p1),
-        easing: "linear",
-      });
+      kArc.push({ offset: off(t1), transform: "translateY(0px)" });
       kF.at(-1).easing = E.estira;
       kF.push({
         offset: off(t0 + 0.2 * T.salto),
@@ -256,6 +283,19 @@
         transform: sc(i === nS - 1 ? F.aterrizaje : F.contacto),
       });
     }
+    kX.at(-1).easing = E.anticipa;
+    kX.push({
+      offset: off(tSalidaCarril),
+      transform: `translateX(${laneDx}px)`,
+    });
+    kX.push({
+      offset: off(tVueltaCarril),
+      transform: `translateX(${laneDx}px)`,
+    });
+    kX.at(-1).easing = E.anticipa;
+    kX.push({ offset: off(llegada), transform: "translateX(0px)" });
+    kArc.push({ offset: 1, transform: "translateY(0px)" });
+    kX.push({ offset: 1, transform: "translateX(0px)" });
     kF.at(-1).easing = E.salida;
     kF.push({
       offset: off(llegada + T.aterrizaje / 2),
@@ -307,6 +347,8 @@
     const opt = { duration: total, fill: "forwards" };
     anims = [
       mascota.animate(kV, opt),
+      mascota.animate(kArc, { ...opt, composite: "add" }),
+      mascota.animate(kX, { ...opt, composite: "add" }),
       svg.animate(kF, opt),
       hojaI.animate(kH(a0I, 1), opt),
       hojaD.animate(kH(a0D, -1), opt),
@@ -359,26 +401,8 @@
     return `scale(${x}, ${y})`;
   }
 
-  function cuandoEntradaLista(id, hecho) {
-    const s = document.getElementById(id);
-    if (!s || s.dataset.entrada === "final") {
-      hecho();
-      return;
-    }
-    const obs = new MutationObserver(() => {
-      if (s.dataset.entrada === "final") {
-        obs.disconnect();
-        hecho();
-      }
-    });
-    obs.observe(s, { attributes: true, attributeFilter: ["data-entrada"] });
-    setTimeout(() => {
-      obs.disconnect();
-      hecho();
-    }, 520);
-  }
-
   function aparecer(id, origen) {
+    window.__inicioAparicion = performance.now();
     cancelar();
     fijar(puntoDeAnclaje(id));
     mascota.dataset.estado = "reposo";
@@ -392,7 +416,6 @@
           [{ opacity: 0 }, { opacity: 1 }],
           {
             duration: T.rmEntrada,
-            delay: T.aparicionRetraso,
             easing: E.desacel,
             fill: "both",
           }
@@ -403,13 +426,21 @@
     }
     viajando = true;
     mascota.classList.add("en-viaje");
-    const total = T.caida + T.hojas;
+    const total =
+      origen === "inicio" ? T.caida + 200 : T.caida + T.hojas;
     const off = (t) => t / total;
     const opt = {
       duration: total,
-      delay: T.aparicionRetraso,
       fill: "both",
     };
+    const syncAncla = () => {
+      if (!viajando) return;
+      fijar(puntoDeAnclaje(id));
+    };
+    if (document.fonts?.addEventListener) {
+      document.fonts.addEventListener("loadingdone", syncAncla);
+    }
+    addEventListener("resize", syncAncla);
     anims = [
       mascota.animate(
         [
@@ -449,7 +480,13 @@
     let listas = 0;
     const todasListas = () => {
       listas += 1;
-      if (listas >= anims.length) fin();
+      if (listas >= anims.length) {
+        if (document.fonts?.removeEventListener) {
+          document.fonts.removeEventListener("loadingdone", syncAncla);
+        }
+        removeEventListener("resize", syncAncla);
+        fin();
+      }
     };
     anims.forEach((a) => {
       a.onfinish = todasListas;
@@ -462,6 +499,7 @@
   let rafScroll = 0;
   let ultimoScrollY = 0;
   let acompanandoScroll = false;
+  let saltoSinA = false;
 
   function navAlto() {
     return document.querySelector(".nav").offsetHeight;
@@ -550,6 +588,24 @@
       return;
     }
     if (viajando) {
+      if (origen === "ancla" || origen === "foco") {
+        sincDocConPantalla();
+        cancelar();
+        viajeDestino = null;
+        saltoSinA = true;
+        pendiente = {
+          desde: pendiente ? pendiente.desde : desde,
+          hasta: id,
+          origen,
+          navScroll: true,
+        };
+        clearTimeout(tQuieto);
+        clearTimeout(tTope);
+        iniciarAcompanarScroll();
+        tQuieto = setTimeout(lanzarPendiente, T.quietud);
+        tTope = setTimeout(lanzarPendiente, T.topeEspera);
+        return;
+      }
       cancelarEspera();
       viajar(viajeDestino || desde, id, origen);
       return;
@@ -738,9 +794,16 @@
     .filter((a) => a.dataset.destino === activa)
     .forEach((a) => a.setAttribute("aria-current", "true"));
   mascota.style.opacity = "0";
-  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() =>
-    cuandoEntradaLista(activa, () => aparecer(activa, "inicio"))
-  );
+  const seccionIni = document.getElementById(activa);
+  const arranqueInicial = () => {
+    seccionIni.dataset.entrada = "final";
+    aparecer(activa, "inicio");
+  };
+  if (reducido.matches) {
+    arranqueInicial();
+  } else {
+    requestAnimationFrame(arranqueInicial);
+  }
 
   reducido.addEventListener("change", () => {
     if (reducido.matches) {

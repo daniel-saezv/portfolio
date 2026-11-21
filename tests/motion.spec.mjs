@@ -18,7 +18,7 @@ const T = {
   hojas: 240,
   debounceScroll: 150,
   quietud: 120,
-  aparicionRetraso: 360,
+  aparicionRetraso: 0,
 };
 
 const MIME = {

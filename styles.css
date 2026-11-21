@@ -299,6 +299,26 @@ a {
   }
 }
 
+@media (max-width: 359.98px) {
+  .nav__interior {
+    padding: 0 var(--e-3);
+    gap: var(--e-1);
+  }
+
+  .nav__nombre {
+    font-size: 0.9375rem;
+  }
+
+  .nav__lista {
+    gap: 0;
+  }
+
+  .nav__enlace {
+    padding: 0 5px;
+    font-size: 0.875rem;
+  }
+}
+
 /* Layout */
 main {
   position: relative;
@@ -333,7 +353,7 @@ main {
 
 @media (max-width: 639.98px) {
   .seccion {
-    padding: var(--e-5);
+    padding: var(--e-5) var(--e-6);
   }
 }
 
@@ -715,6 +735,15 @@ main {
 
 .brote[data-estado="aterrizaje"] #brote-hoja-der {
   transform: rotate(-12deg);
+}
+
+.brote.en-viaje[data-estado="salto"] svg,
+.brote.en-viaje[data-estado="aterrizaje"] svg,
+.brote.en-viaje[data-estado="salto"] #brote-hoja-izq,
+.brote.en-viaje[data-estado="salto"] #brote-hoja-der,
+.brote.en-viaje[data-estado="aterrizaje"] #brote-hoja-izq,
+.brote.en-viaje[data-estado="aterrizaje"] #brote-hoja-der {
+  transform: none;
 }
 
 .brote #brote-ojo-izq {
