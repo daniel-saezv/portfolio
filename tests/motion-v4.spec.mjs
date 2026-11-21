@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import {
@@ -1556,8 +1556,17 @@ async function scrollManualConLog(page, width) {
 
 function duracionVideoSeg(ruta) {
   try {
-    const out = execSync(
-      `ffprobe -v error -show_entries format=duration -of default=nk=1:nw=1 "${ruta}"`,
+    const out = execFileSync(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=nk=1:nw=1",
+        ruta,
+      ],
       { encoding: "utf8" }
     );
     return parseFloat(out.trim());
@@ -1608,13 +1617,49 @@ async function grabarDemoCompleta(browser, baseUrl, width, height, name) {
   const mp4 = path.join(artifactDir, name);
   const fps = 60;
   try {
-    execSync(
-      `ffmpeg -y -i "${webm}" -vf "fps=${fps}" -r ${fps} -c:v libx264 -pix_fmt yuv420p -crf 22 -movflags +faststart "${mp4}"`,
+    execFileSync(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        webm,
+        "-vf",
+        `fps=${fps}`,
+        "-r",
+        String(fps),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-crf",
+        "22",
+        "-movflags",
+        "+faststart",
+        mp4,
+      ],
       { stdio: "pipe" }
     );
   } catch {
-    execSync(
-      `ffmpeg -y -i "${webm}" -vf "fps=30" -r 30 -c:v libx264 -pix_fmt yuv420p -crf 22 -movflags +faststart "${mp4}"`,
+    execFileSync(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        webm,
+        "-vf",
+        "fps=30",
+        "-r",
+        "30",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-crf",
+        "22",
+        "-movflags",
+        "+faststart",
+        mp4,
+      ],
       { stdio: "pipe" }
     );
   }

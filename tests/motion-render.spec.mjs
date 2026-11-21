@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import {
@@ -529,8 +529,24 @@ async function grabarV3(browser, baseUrl, width, height, filename) {
   const tmpWebm = path.join(artifactDir, `_tmp-${width}.webm`);
   if (!latest) fail(`Sin vídeo Playwright para ${filename}`);
   fs.renameSync(path.join(artifactDir, latest), tmpWebm);
-  execSync(
-    `ffmpeg -y -i "${tmpWebm}" -vf "fps=30" -c:v libx264 -pix_fmt yuv420p -crf 23 -movflags +faststart "${dest}"`,
+  execFileSync(
+    "ffmpeg",
+    [
+      "-y",
+      "-i",
+      tmpWebm,
+      "-vf",
+      "fps=30",
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-crf",
+      "23",
+      "-movflags",
+      "+faststart",
+      dest,
+    ],
     { stdio: "pipe" }
   );
   try {
@@ -547,8 +563,20 @@ async function grabarV3(browser, baseUrl, width, height, filename) {
 function extraerFrames(videoPath, prefix, count = 5) {
   const dir = path.join(artifactDir, `${prefix}-frames`);
   fs.mkdirSync(dir, { recursive: true });
-  execSync(
-    `ffmpeg -y -i "${videoPath}" -vf "select='gte(n\\,0)'" -vsync vfr -frames:v ${count} "${dir}/frame-%02d.png"`,
+  execFileSync(
+    "ffmpeg",
+    [
+      "-y",
+      "-i",
+      videoPath,
+      "-vf",
+      "select=gte(n\\,0)",
+      "-vsync",
+      "vfr",
+      "-frames:v",
+      String(count),
+      path.join(dir, "frame-%02d.png"),
+    ],
     { stdio: "pipe" }
   );
   const frames = fs.readdirSync(dir).map((f) => path.join(dir, f));
