@@ -211,7 +211,10 @@
       (laneLeftNow ||
         Math.abs(mascota.getBoundingClientRect().left - xLaneRef) <= 1.5);
     cancelar();
-    const o0 = { x: mV.e, y: mV.f };
+    const o0 = {
+      x: Math.round(mV.e * 1000) / 1000,
+      y: Math.round(mV.f * 1000) / 1000,
+    };
     fijar(o0);
 
     if (reducido.matches) {
@@ -399,10 +402,15 @@
     const kX = [
       { offset: 0, transform: `translateX(${xAdd0}px)`, easing: E.anticipa },
     ];
+    const snapLaneAddV = () => {
+      const left = mascota.getBoundingClientRect().left;
+      return Math.round((xCarrilV - left) * 1000) / 1000;
+    };
     const addKx = (offset, pathX, easing) => {
+      const tx = Math.round((xLane - pathX) * 1000) / 1000;
       kX.push({
         offset,
-        transform: `translateX(${xLane - pathX}px)`,
+        transform: `translateX(${tx}px)`,
         easing: easing || E.cuerda,
       });
     };
@@ -417,18 +425,19 @@
           ? off(Math.max(A, 0))
           : offSalida;
       if (origen === "scroll" || enCarrilAhora) {
-        const k0 = docX(kV[0].transform);
-        kX[0].transform = `translateX(${
-          (enCarrilAhora ? 0 : xAdd0) + xLane - k0
-        }px)`;
-        addKx(
-          margenDesde,
-          docX(
-            kV.find((k) => k.offset >= margenDesde - 1e-6)?.transform ||
-              kV[0].transform
-          ),
-          E.cuerda
-        );
+        if (enCarrilAhora) {
+          kX[0].transform = `translateX(${snapLaneAddV()}px)`;
+        } else {
+          const k0 = docX(kV[0].transform);
+          kX[0].transform = `translateX(${xAdd0 + xLane - k0}px)`;
+        }
+        const pathInicio = enCarrilAhora
+          ? posDocDesdeCss().x
+          : docX(
+              kV.find((k) => k.offset >= margenDesde - 1e-6)?.transform ||
+                kV[0].transform
+            );
+        addKx(margenDesde, pathInicio, E.cuerda);
         for (const kf of kV) {
           if (kf.offset <= margenDesde + 1e-6) continue;
           if (kf.offset >= offVuelta - 1e-6) break;

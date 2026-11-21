@@ -431,12 +431,20 @@ function verificarC27(eventos, etiqueta) {
   return { viol, viajes };
 }
 
-function analizarRetargetEnCarril(frames, eventos, nuevoDest) {
+function analizarRetargetEnCarril(frames, eventos, nuevoDest, metaCarril) {
   const saltos = eventos.filter(
     (e) => e.nombre === "brote:salto" && e.detail?.n > 0
   );
   const primero = saltos.find((s) => s.detail?.carril && !s.detail?.recto);
-  const segundo = saltos.filter((s) => s.t > (primero?.t ?? 0)).at(-1);
+  const segundo = saltos
+    .filter(
+      (s) =>
+        s.detail?.retarget &&
+        s.detail?.hasta === nuevoDest &&
+        primero &&
+        s.t > primero.t
+    )
+    .at(-1);
   if (!primero || !segundo) {
     return {
       ok: false,
@@ -444,7 +452,11 @@ function analizarRetargetEnCarril(frames, eventos, nuevoDest) {
       saltos: saltos.length,
     };
   }
-  const tClick = segundo.t;
+  const tClick =
+    typeof metaCarril?.clickT === "number"
+      ? metaCarril.clickT
+      : segundo.t;
+  const tJump = segundo.t;
   const { tSalidaFin, tVueltaInicio } = ventanaCarrilMs(
     primero,
     null,
@@ -484,12 +496,16 @@ function analizarRetargetEnCarril(frames, eventos, nuevoDest) {
       }
     }
   };
+  const tFinPrimero = Math.min(
+    typeof tClick === "number" ? tClick : Infinity,
+    segundo.t
+  ) - 12;
   medirVentana(
     primero.t,
     tSalidaFin,
     tVueltaInicio,
     primero.detail.hasta,
-    tClick - 1,
+    tFinPrimero,
     16
   );
   medirVentana(
@@ -498,7 +514,7 @@ function analizarRetargetEnCarril(frames, eventos, nuevoDest) {
     t2Vuelta,
     segundo.detail.hasta,
     Infinity,
-    48
+    64
   );
   for (let i = 1; i < frames.length; i++) {
     const f = frames[i];
@@ -510,10 +526,10 @@ function analizarRetargetEnCarril(frames, eventos, nuevoDest) {
       );
     }
   }
-  const idxClick = frames.findIndex((f) => f.t >= tClick - 1);
-  if (idxClick > 0) {
-    const f = frames[idxClick];
-    const p = frames[idxClick - 1];
+  const idxJump = frames.findIndex((f) => f.t >= tJump - 2);
+  if (idxJump > 0) {
+    const f = frames[idxJump];
+    const p = frames[idxJump - 1];
     maxJump = Math.max(
       maxJump,
       Math.abs(f.brote.left - p.brote.left),
@@ -832,6 +848,20 @@ async function ejecutarRetargetCarril(page, baseUrl, width, nuevoHref, nuevoId) 
           m?.dataset.estado === "salto" &&
           m.getAnimations().length > 0
         ) {
+          const destTitulo = document
+            .querySelector("#enlaces .titulo-seccion")
+            ?.getBoundingClientRect();
+          const s = m.offsetWidth || m.getBoundingClientRect().width;
+          const xLane =
+            destTitulo != null
+              ? Math.max(4, destTitulo.left - s - 8)
+              : m.getBoundingClientRect().left;
+          const enCarril =
+            Math.abs(m.getBoundingClientRect().left - xLane) <= 1.05;
+          if (!enCarril) {
+            await new Promise((r) => requestAnimationFrame(r));
+            continue;
+          }
           const clickT = Math.round(performance.now());
           document.querySelector(`nav a[href="${hrefDest}"]`).click();
           return {
@@ -878,7 +908,7 @@ async function ejecutarRetargetCarril(page, baseUrl, width, nuevoHref, nuevoId) 
     return window.__rafFrames;
   });
   const ev = await page.evaluate(() => window.__eventos);
-  const resultado = analizarRetargetEnCarril(frames, ev, nuevoId);
+  const resultado = analizarRetargetEnCarril(frames, ev, nuevoId, metaCarril);
   const carrilR2 = medirCarrilEnFrames(frames, ev, `retarget-${width}`);
   verificarC27(ev, `${width}px retarget carril`);
   guardarJson(`retarget-carril-${width}.json`, {
