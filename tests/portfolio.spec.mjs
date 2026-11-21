@@ -92,7 +92,32 @@ async function assertNoHorizontalScroll(page) {
   }
 }
 
-async function runViewport(browser, baseUrl, width, artifactDir, captureShot) {
+async function assertSingleNavActive(page, expectedId) {
+  const estado = await page.evaluate(() => {
+    const currents = [...document.querySelectorAll('.nav__enlace[aria-current="true"]')];
+    return {
+      seccionActiva: document.body.dataset.seccionActiva,
+      currentHrefs: currents.map((a) => a.getAttribute("href")),
+    };
+  });
+  if (estado.seccionActiva !== expectedId) {
+    throw new Error(
+      `data-seccion-activa=${estado.seccionActiva}, esperado ${expectedId}`
+    );
+  }
+  if (estado.currentHrefs.length !== 1) {
+    throw new Error(
+      `aria-current en ${estado.currentHrefs.length} enlaces: ${estado.currentHrefs.join(", ")}`
+    );
+  }
+  if (estado.currentHrefs[0] !== `#${expectedId}`) {
+    throw new Error(
+      `aria-current en ${estado.currentHrefs[0]}, esperado #${expectedId}`
+    );
+  }
+}
+
+async function runNavInteraction(browser, baseUrl, width) {
   const page = await browser.newPage({ viewport: { width, height: 800 } });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
@@ -122,6 +147,7 @@ async function runViewport(browser, baseUrl, width, artifactDir, captureShot) {
       id,
       { timeout: 5000 }
     );
+    await assertSingleNavActive(page, id);
   }
 
   await page.evaluate(() => {
@@ -133,6 +159,7 @@ async function runViewport(browser, baseUrl, width, artifactDir, captureShot) {
     null,
     { timeout: 5000 }
   );
+  await assertSingleNavActive(page, "enlaces");
 
   await page.evaluate(() => {
     window.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
@@ -143,15 +170,35 @@ async function runViewport(browser, baseUrl, width, artifactDir, captureShot) {
     null,
     { timeout: 5000 }
   );
+  await assertSingleNavActive(page, "sobre-mi");
 
   await assertNoHorizontalScroll(page);
+  await page.close();
+}
 
-  let shot = null;
-  if (captureShot) {
-    shot = path.join(artifactDir, `portfolio-${width}px.png`);
-    await page.screenshot({ path: shot, fullPage: true });
-  }
+/** Captura alineada con design/capturas: carga inicial, sin hover residual del test. */
+async function captureReferenceScreenshot(browser, baseUrl, width, artifactDir) {
+  const page = await browser.newPage({ viewport: { width, height: 800 } });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await page.waitForFunction(() => document.fonts.status === "loaded");
+  await page.waitForFunction(
+    () => document.body.dataset.seccionActiva === "sobre-mi",
+    null,
+    { timeout: 5000 }
+  );
+  await assertSingleNavActive(page, "sobre-mi");
+  await assertNoHorizontalScroll(page);
 
+  await page.mouse.move(0, 0);
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+  });
+
+  const shot = path.join(artifactDir, `portfolio-${width}px.png`);
+  await page.screenshot({ path: shot, fullPage: true });
   await page.close();
   return shot;
 }
@@ -188,20 +235,18 @@ async function main() {
       await page.close();
     }
 
-    for (const w of [375, ...SCREENSHOT_WIDTHS]) {
-      const shot = await runViewport(
+    await runNavInteraction(browser, baseUrl, 375);
+    console.log("OK viewport interactivo 375px");
+
+    for (const w of SCREENSHOT_WIDTHS) {
+      const shot = await captureReferenceScreenshot(
         browser,
         baseUrl,
         w,
-        artifactDir,
-        SCREENSHOT_WIDTHS.includes(w)
+        artifactDir
       );
-      if (shot) {
-        screenshotResults.push({ width: w, screenshot: shot });
-        console.log(`OK viewport interactivo ${w}px -> ${shot}`);
-      } else {
-        console.log(`OK viewport interactivo ${w}px`);
-      }
+      screenshotResults.push({ width: w, screenshot: shot });
+      console.log(`OK captura referencia ${w}px -> ${shot}`);
     }
   } finally {
     await browser.close();
