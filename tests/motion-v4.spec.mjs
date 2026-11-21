@@ -499,7 +499,7 @@ function analizarRetargetEnCarril(frames, eventos, nuevoDest, metaCarril) {
   const tFinPrimero = Math.min(
     typeof tClick === "number" ? tClick : Infinity,
     segundo.t
-  ) - 12;
+  ) - 36;
   medirVentana(
     primero.t,
     tSalidaFin,

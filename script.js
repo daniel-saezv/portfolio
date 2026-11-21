@@ -147,7 +147,8 @@
     return Math.round(r.left + scrollX - a.x);
   }
 
-  const tr = (p) => `translate(${p.x}px, ${p.y}px)`;
+  const tr = (p) =>
+    `translate(${Math.round(p.x * 1000) / 1000}px, ${Math.round(p.y * 1000) / 1000}px)`;
 
   function fijar(p) {
     mascota.style.setProperty("--brote-x", Math.round(p.x) + "px");
@@ -396,7 +397,7 @@
     const offVuelta = off(tVueltaCarril);
     const docX = (transform) => {
       const m = transform.match(/translate\((-?[\d.]+)px/);
-      return m ? parseFloat(m[1]) : 0;
+      return m ? Math.round(parseFloat(m[1]) * 1000) / 1000 : 0;
     };
     const xLane = xCarril;
     const kX = [
@@ -427,21 +428,27 @@
       if (origen === "scroll" || enCarrilAhora) {
         if (enCarrilAhora) {
           kX[0].transform = `translateX(${snapLaneAddV()}px)`;
+          for (const kf of kV) {
+            if (kf.offset <= margenDesde + 1e-6) continue;
+            if (kf.offset >= offVuelta - 1e-6) break;
+            addKx(kf.offset, docX(kf.transform), kf.easing);
+          }
         } else {
           const k0 = docX(kV[0].transform);
           kX[0].transform = `translateX(${xAdd0 + xLane - k0}px)`;
-        }
-        const pathInicio = enCarrilAhora
-          ? posDocDesdeCss().x
-          : docX(
+          addKx(
+            margenDesde,
+            docX(
               kV.find((k) => k.offset >= margenDesde - 1e-6)?.transform ||
                 kV[0].transform
-            );
-        addKx(margenDesde, pathInicio, E.cuerda);
-        for (const kf of kV) {
-          if (kf.offset <= margenDesde + 1e-6) continue;
-          if (kf.offset >= offVuelta - 1e-6) break;
-          addKx(kf.offset, docX(kf.transform), kf.easing);
+            ),
+            E.cuerda
+          );
+          for (const kf of kV) {
+            if (kf.offset <= margenDesde + 1e-6) continue;
+            if (kf.offset >= offVuelta - 1e-6) break;
+            addKx(kf.offset, docX(kf.transform), kf.easing);
+          }
         }
       } else {
         addKx(offSalida, docX(tr(posSaltoFraccion(0, 0.4))), E.cuerda);
