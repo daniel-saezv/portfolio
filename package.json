@@ -1,13 +1,9 @@
 {
-  "name": "workspace",
+  "name": "portfolio",
   "version": "1.0.0",
   "description": "",
-  "main": "script.js",
-  "directories": {
-    "test": "tests"
-  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node tests/portfolio.spec.mjs"
   },
   "repository": {
     "type": "git",
