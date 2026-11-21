@@ -4,6 +4,12 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 
 /** Recompensa cy si scrollY cambia durante el salto (coords de pantalla con scroll congelado). */
+/** cy de ancla (mitad del tamaño lógico `offsetWidth`, sin sesgo del bbox escalado). */
+export function cyAnclaMascota(m, r) {
+  const s = m.offsetWidth || r.height;
+  return r.top + s / 2;
+}
+
 export function compensarScroll(samples) {
   const pts = muestrasArco(samples);
   if (!pts.length) return pts;
@@ -30,6 +36,55 @@ export function muestrasArco(samples) {
 }
 
 /** Arco por cada saltito (cambio de convexidad en cy). */
+/** Un arco por ventana WAAPI de 240 ms (§11.1), tras anticipación 80 ms. */
+function arcosEnVentanas(pts, nSaltos, base) {
+  const A = 80;
+  const Ts = 240;
+  const Tc = 40;
+  const arcs = [];
+  for (let i = 0; i < nSaltos; i++) {
+    const phaseStart = base + A + i * (Ts + Tc);
+    const phaseEnd = phaseStart + Ts;
+    const chunk = pts.filter(
+      (p) => p.t >= phaseStart - 20 && p.t <= phaseEnd + 20
+    );
+    if (chunk.length >= 3) arcs.push(alturaArcoEnTramo(chunk));
+  }
+  return arcs.filter((a) => a > 0.2);
+}
+
+export function arcosPorSaltitosAnimacion(samples, nSaltos, saltoT = 0, hRef = 0) {
+  const pts = compensarScroll(
+    muestrasArco(
+      samples.map((p) => ({
+        ...p,
+        sy: p.sy ?? 0,
+      }))
+    )
+  );
+  if (pts.length < 2 || nSaltos < 1) return [];
+  const tGuess = saltoT > 0 ? saltoT : pts[0].t;
+  let best = null;
+  let bestScore = Infinity;
+  for (let shift = -100; shift <= 60; shift += 5) {
+    const arcs = arcosEnVentanas(pts, nSaltos, tGuess + shift);
+    if (arcs.length !== nSaltos) continue;
+    const score =
+      hRef > 0
+        ? arcs.reduce((s, a) => s + Math.abs(a - hRef), 0)
+        : Math.abs(shift) + arcs.length * 0.01;
+    if (
+      score < bestScore - 0.05 ||
+      (Math.abs(score - bestScore) < 0.05 && Math.abs(shift) < Math.abs(best?.shift ?? 999))
+    ) {
+      best = { arcs, shift };
+      bestScore = score;
+    }
+  }
+  if (best?.arcs.length) return best.arcs;
+  return arcosEnVentanas(pts, nSaltos, tGuess);
+}
+
 /** Divide el vuelo en n saltitos por tiempo (como viajar() con n tramos). */
 export function arcosPorTiempo(samples, nSaltos) {
   const pts = muestrasArco(samples);
@@ -84,13 +139,18 @@ function alturaArcoEnTramo(pts) {
  * interpolación lineal en tiempo entre despegue y aterrizaje (coords viewport).
  */
 /** Máx. arco por saltito (desviación hacia arriba respecto a la cuerda local). */
-export function alturaArcoRenderizada(samples, nSaltos) {
-  const pts = compensarScroll(samples);
-  const segs = nSaltos
-    ? arcosPorTiempo(pts, nSaltos)
-    : arcosPorSegmento(pts);
-  if (!segs.length) return alturaArcoEnTramo(muestrasArco(samples));
-  return Math.round(Math.max(...segs) * 10) / 10;
+export function alturaArcoRenderizada(samples, nSaltos, saltoT = 0) {
+  const n = nSaltos > 0 ? nSaltos : 1;
+  let arcs = arcosPorSaltitosAnimacion(samples, n, saltoT);
+  if (arcs.length < n) {
+    const pts = compensarScroll(muestrasArco(samples));
+    arcs =
+      n > 1
+        ? arcosPorTiempo(pts, n)
+        : arcosPorSegmento(pts);
+  }
+  if (!arcs.length) return alturaArcoEnTramo(muestrasArco(samples));
+  return Math.round(Math.max(...arcs) * 10) / 10;
 }
 
 export function alturaArcoGlobal(samples) {
@@ -115,6 +175,8 @@ export async function instalarMuestreoSalto(page, intervalMs = 33) {
         if (!window.__trayOn) return;
         const m = document.getElementById("mascota");
         const r = m.getBoundingClientRect();
+        const s = m.offsetWidth || r.width;
+        const cy = r.top + s / 2;
         window.__tray.push({
           t: performance.now(),
           left: r.left,
@@ -123,7 +185,7 @@ export async function instalarMuestreoSalto(page, intervalMs = 33) {
           w: r.width,
           h: r.height,
           cx: r.left + r.width / 2,
-          cy: r.top + r.height / 2,
+          cy,
           estado: m.dataset.estado,
         });
         window.__trayTimer = setTimeout(tick, ms);
@@ -382,11 +444,56 @@ export function nSaltosDesdeSalto(salto) {
   return n;
 }
 
-export function informarArco(etiqueta, samples, hMin, hMax, nSaltos = 1) {
-  const arco = alturaArcoRenderizada(samples, nSaltos);
+export function medirArcosSaltos(samples, salto) {
+  const n =
+    typeof salto?.detail?.n === "number" && salto.detail.n > 0
+      ? salto.detail.n
+      : nSaltosDesdeSalto(salto);
+  const saltoT = salto?.t ?? muestrasArco(samples)[0]?.t ?? 0;
+  const hRef =
+    typeof salto?.detail?.h === "number" && salto.detail.h > 0
+      ? salto.detail.h
+      : 0;
+  const arcs = arcosPorSaltitosAnimacion(samples, n, saltoT, hRef);
+  if (arcs.length < n) {
+    const pts = compensarScroll(muestrasArco(samples));
+    const seg = arcosPorSegmento(pts);
+    if (seg.length >= n) {
+      const use = seg.slice(0, n);
+      return {
+        arcs: use,
+        max: Math.round(Math.max(...use) * 10) / 10,
+        n,
+      };
+    }
+  }
+  const max = arcs.length ? Math.round(Math.max(...arcs) * 10) / 10 : 0;
+  return { arcs, max, n };
+}
+
+export function assertArcoEnSpec(arcs, hMin, hMax, etiqueta, nSaltos = arcs.length) {
+  const errs = [];
+  if (nSaltos > 0 && arcs.length !== nSaltos) {
+    errs.push(`medidos ${arcs.length}/${nSaltos} saltitos`);
+  }
+  arcs.forEach((a, i) => {
+    if (a < hMin - 0.5) errs.push(`saltito ${i + 1}: ${a}px < ${hMin}px`);
+    if (a > hMax + 0.5) errs.push(`saltito ${i + 1}: ${a}px > ${hMax}px (C11)`);
+  });
+  if (!arcs.length) errs.push("sin muestras de arco");
+  if (errs.length) {
+    const e = new Error(`${etiqueta}: ${errs.join("; ")}`);
+    e.arcs = arcs;
+    throw e;
+  }
+}
+
+export function informarArco(etiqueta, samples, salto, hMin, hMax) {
+  const { arcs, max, n } = medirArcosSaltos(samples, salto);
   const cuerda = cuerdaVertical(samples);
   console.log(
-    `  arco ${etiqueta}: ${arco}px (cuerda Δy=${cuerda}px, mín=${hMin}px, máx=${hMax}px, muestras=${muestrasArco(samples).length})`
+    `  arco ${etiqueta}: saltitos=[${arcs.map((a) => a.toFixed(1)).join(", ")}] max=${max}px (mín=${hMin} máx=${hMax} n=${n}, cuerda Δy=${cuerda}px, muestras=${muestrasArco(samples).length})`
   );
-  return arco;
+  assertArcoEnSpec(arcs, hMin, hMax, etiqueta, n);
+  return max;
 }

@@ -194,9 +194,10 @@
     if (nS === 1 && dist > 360) nS = 2;
     nS = Math.max(1, nS);
     const hMin = 0.5 * s;
+    const hCap = Math.max(hMin, 1.5 * s - (s <= 36 ? 3 : 4));
     const h = Math.max(
       hMin,
-      Math.min(0.5 * s + 0.25 * (dist / nS), 1.5 * s)
+      Math.min(0.5 * s + 0.25 * (dist / nS), hCap)
     );
     const A = retarget ? 0 : T.anticipacion;
     const llegada = A + nS * T.salto + (nS - 1) * T.contacto;
@@ -204,7 +205,7 @@
     const off = (t) => t / total;
     const sc = ([x, y]) => `scale(${x}, ${y})`;
 
-    const kV = [{ offset: 0, transform: tr(o) }];
+    const kV = [{ offset: 0, transform: tr(o), easing: E.cuerda }];
     const kF = [{ offset: 0, transform: sc([mF.a, mF.d]), easing: E.anticipa }];
     if (A) {
       kV.push({ offset: off(A), transform: tr(o) });
@@ -228,19 +229,23 @@
         kV.push({ offset: off(t0), transform: kV.at(-1).transform });
         kF.push({ offset: off(t0), transform: sc(F.contacto) });
       }
-      kV.at(-1).easing = E.cuerda;
+      kV.at(-1).easing = "linear";
       kV.push({
         offset: off(tMid),
         transform: tr(pApex),
-        easing: E.subida,
+        easing: "linear",
       });
       kV.push({
         offset: off(t1),
         transform: tr(p1),
-        easing: E.bajada,
+        easing: "linear",
       });
       kF.at(-1).easing = E.estira;
-      kF.push({ offset: off(t0 + 0.2 * T.salto), transform: sc(F.salto) });
+      kF.push({
+        offset: off(t0 + 0.2 * T.salto),
+        transform: sc(F.salto),
+        easing: E.subida,
+      });
       kF.push({
         offset: off(t0 + 0.8 * T.salto),
         transform: sc(F.previo),
@@ -268,6 +273,7 @@
       {
         offset: off(A + 0.3 * T.salto),
         transform: `rotate(${-signo * HOJA.salto}deg)`,
+        easing: E.subida,
       },
       {
         offset: off(llegada),

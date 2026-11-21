@@ -13,8 +13,8 @@ import {
 } from "./motion-helpers.mjs";
 import {
   alturaArcoRenderizada,
-  arcosPorSegmento,
-  arcosPorTiempo,
+  medirArcosSaltos,
+  assertArcoEnSpec,
   compensarScroll,
   nSaltosDesdeSalto,
   instalarMuestreoSalto,
@@ -73,7 +73,7 @@ async function instalarMuestreoC15Raf(page) {
         w: r.width,
         h: r.height,
         cx: (r.left + r.right) / 2,
-        cy: (r.top + r.bottom) / 2,
+        cy: r.top + (m.offsetWidth || r.height) / 2,
         frac: r.height > 0 ? vis / r.height : 0,
         estado: m.dataset.estado,
       });
@@ -103,7 +103,10 @@ async function instalarMuestreoC15Raf(page) {
   });
 }
 
-async function criterio15Nav(page, width, href, sectionId) {
+let scrollDemoLogeado = false;
+
+async function criterio15Nav(page, width, href, sectionId, opts = {}) {
+  const { soloArco = false } = opts;
   const hMin = H_MIN[width] || 24;
   const hMax = H_MAX[width] || 72;
   await instalarMuestreoC15Raf(page);
@@ -175,15 +178,30 @@ async function criterio15Nav(page, width, href, sectionId) {
   if (!salto) {
     fail(`${width}px C15 ${sectionId}: sin evento brote:salto`);
   }
-  const comp = compensarScroll(flightFrames);
-  const nSaltos = nSaltosDesdeSalto(salto);
-  const segmentArcs =
-    nSaltos > 1
-      ? arcosPorTiempo(comp, nSaltos)
-      : arcosPorSegmento(comp);
-  const arcSpan = segmentArcs.length
-    ? Math.max(...segmentArcs)
-    : alturaArcoRenderizada(flightFrames, nSaltos);
+  const { arcs: segmentArcs, max: arcSpan, n: nSaltos } = medirArcosSaltos(
+    flightFrames,
+    salto
+  );
+  if (
+    !scrollDemoLogeado &&
+    sectionId === "habilidades" &&
+    width === 390
+  ) {
+    scrollDemoLogeado = true;
+    const demo = scrollFrames.slice(0, 10).map(
+      (f, i) =>
+        `#${i} scrollY=${f.sy} top=${f.top.toFixed(2)} drift=${f.drift?.toFixed(2) ?? "—"}`
+    );
+    console.log(
+      `  C15 demostración muestreo scroll (390 habilidades, sy cambia; deriva |Δtop| entre frames consecutivos con scrollY distinto):\n    ${demo.join("\n    ")}`
+    );
+    const syCambia = scrollFrames.some(
+      (f, i, arr) => i > 0 && f.sy !== arr[i - 1].sy
+    );
+    if (!syCambia) {
+      fail("390px C15 habilidades: scrollY no cambió en fase scroll (muestreo inválido)");
+    }
+  }
   if (frames.length < 8) {
     fail(`${width}px C15 ${sectionId}: pocas muestras rAF (${frames.length})`);
   }
@@ -208,29 +226,23 @@ async function criterio15Nav(page, width, href, sectionId) {
   if (dtR == null || dtR < 560) {
     fail(`${width}px C15 ${sectionId}: Δreposo=${dtR}ms < 560`);
   }
-  if (arcSpan < hMin) {
-    fail(
-      `${width}px C15 ${sectionId}: arco ${arcSpan}px < mínimo ${hMin}px (saltitos=${segmentArcs.join(",")} vuelo=${flightFrames.length})`
+  try {
+    assertArcoEnSpec(
+      segmentArcs,
+      hMin,
+      hMax,
+      `${width}px C15 ${sectionId}`,
+      nSaltos
+    );
+  } catch (e) {
+    fail(e.message);
+  }
+  if (!soloArco) {
+    ok(
+      `${width}px C15 ${sectionId}: vis≥50%, scroll ${scrollFrames.length} frames maxΔ=${maxDrift.toFixed(2)}px, T${dtA}/${dtR}ms, arco saltitos=[${segmentArcs.map((a) => a.toFixed(1)).join(", ")}] (n=${nSaltos})`
     );
   }
-  for (const [i, a] of segmentArcs.entries()) {
-    if (a < hMin - 1) {
-      fail(
-        `${width}px C15 ${sectionId}: saltito ${i + 1} arco ${a}px < ${hMin}px`
-      );
-    }
-    const hCap = salto?.detail?.h ?? hMax;
-    const tol = nSaltos > 1 ? 30 : 12;
-    if (a > hCap + tol) {
-      fail(
-        `${width}px C15 ${sectionId}: saltito ${i + 1} arco ${a}px > diseño ${hCap}px (+${tol}px)`
-      );
-    }
-  }
-  ok(
-    `${width}px C15 ${sectionId}: vis≥50%, scroll ${scrollFrames.length} frames maxΔ=${maxDrift.toFixed(2)}px, T${dtA}/${dtR}ms, arco ${arcSpan.toFixed(1)}px (${segmentArcs.length} saltitos)`
-  );
-  return { arcSpan, maxDrift, scrollFrames: scrollFrames.length };
+  return { arcSpan, maxDrift, scrollFrames: scrollFrames.length, segmentArcs };
 }
 
 async function correrFlujoNav(page, widths) {
@@ -261,50 +273,65 @@ async function assertSaltoAnimado(page, label) {
   const saltosPrev = await page.evaluate(
     () => window.__eventos?.filter((e) => e.nombre === "brote:salto").length ?? 0
   );
+  await instalarMuestreoSalto(page, 16);
+  await page.evaluate(() => {
+    window.__tray = [];
+    window.__trayOn = true;
+    let raf = 0;
+    const loop = () => {
+      if (!window.__trayOn) return;
+      const m = document.getElementById("mascota");
+      const r = m.getBoundingClientRect();
+      const s = m.offsetWidth || r.height;
+      const svg = m.querySelector("svg");
+      const sm = new DOMMatrixReadOnly(getComputedStyle(svg).transform);
+      window.__tray.push({
+        t: performance.now(),
+        cy: r.top + s / 2,
+        sy: scrollY,
+        svgSy: Math.round(sm.d * 100) / 100,
+        estado: m.dataset.estado,
+      });
+      raf = requestAnimationFrame(loop);
+    };
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(loop);
+  });
   await page.click('nav a[href="#enlaces"]');
-  await page.waitForFunction(
-    () => document.getElementById("mascota").dataset.estado === "salto",
-    null,
-    { timeout: 12000 }
-  );
+  await waitReposoEnSeccion(page, "enlaces", 20000);
+  const frames = await page.evaluate(() => {
+    window.__trayOn = false;
+    return window.__tray || [];
+  });
   const saltoEv = await page.evaluate((n) => {
     const ev = window.__eventos || [];
     return ev.filter((e) => e.nombre === "brote:salto").slice(n).at(-1);
   }, saltosPrev);
-  const nSaltos = saltoEv?.detail?.n > 0 ? saltoEv.detail.n : 1;
-  const hCap = (saltoEv?.detail?.h ?? hMax) + (nSaltos > 1 ? 30 : 12);
-  const frames = [];
-  for (let i = 0; i < 40; i++) {
-    await page.waitForTimeout(25);
-    const f = await page.evaluate(() => {
-      const m = document.getElementById("mascota");
-      const r = m.getBoundingClientRect();
-      const svg = m.querySelector("svg");
-      const sm = new DOMMatrixReadOnly(getComputedStyle(svg).transform);
-      return {
-        t: performance.now(),
-        cy: (r.top + r.bottom) / 2,
-        sy: Math.round(sm.d * 100) / 100,
-        estado: m.dataset.estado,
-      };
-    });
-    frames.push(f);
-    if (f.estado === "reposo" && frames.length > 12) break;
+  const fly = frames.filter((f) => f.estado === "salto");
+  const { arcs, max: arcPx } = medirArcosSaltos(fly, saltoEv);
+  try {
+    assertArcoEnSpec(
+      arcs,
+      hMin,
+      hMax,
+      `${label} salto animado`,
+      nSaltosDesdeSalto(saltoEv)
+    );
+  } catch (e) {
+    fail(e.message);
   }
-  const arcPx = alturaArcoRenderizada(frames, nSaltos);
-  const scales = frames.map((f) => f.sy);
+  const scales = frames.map((f) => f.svgSy);
   const minScale = Math.min(...scales);
   const maxScale = Math.max(...scales);
   const squashOk = minScale <= 0.94 && maxScale >= 1.08;
   const noTeleport = frames.length >= 10;
-  const arcOk = arcPx >= hMin - 1 && arcPx <= hCap;
-  if (!arcOk || !squashOk || !noTeleport) {
+  if (!squashOk || !noTeleport) {
     fail(
-      `${label}: arco=${arcPx}px (min ${hMin} max ${hMax}) squash=${squashOk} (${minScale}–${maxScale}) muestras=${frames.length}`
+      `${label}: squash=${squashOk} (${minScale}–${maxScale}) muestras=${frames.length}`
     );
   }
   ok(
-    `${label}: salto arco ${arcPx}px, squash ${minScale}–${maxScale}, ${frames.length} muestras`
+    `${label}: salto arco saltitos=[${arcs.map((a) => a.toFixed(1)).join(", ")}] max=${arcPx}px, squash ${minScale}–${maxScale}, ${frames.length} muestras`
   );
   await waitReposoEnSeccion(page, "enlaces");
   const landed = await assertReposoRenderizado(page, "enlaces");
@@ -401,18 +428,13 @@ async function artefactoTrayectoria(
   const nav = await capturarSaltoNav(page, "#enlaces", "enlaces");
   const hMin = H_MIN[width] || 24;
   const hMax = H_MAX[width] || 72;
-  const nNav = nSaltosDesdeSalto(nav.salto);
   const arcoNav = informarArco(
     `${width}px clic nav→enlaces`,
     nav.samples,
+    nav.salto,
     hMin,
-    hMax,
-    nNav
+    hMax
   );
-  const tolNav = nNav > 1 ? 30 : 12;
-  if (arcoNav < hMin - 1 || arcoNav > (nav.salto?.detail?.h ?? hMax) + tolNav) {
-    fail(`${width}px arco nav ${arcoNav}px fuera de [${hMin}, ${(nav.salto?.detail?.h ?? hMax) + tolNav}]`);
-  }
   const panelNav = await panelTrayectoria(
     browser,
     page,
@@ -427,23 +449,13 @@ async function artefactoTrayectoria(
   await waitFonts(page);
   await waitAparicionInicial(page);
   const scroll = await capturarSaltoScroll(page);
-  const nScroll = nSaltosDesdeSalto(scroll.salto);
   const arcoScroll = informarArco(
     `${width}px scroll→${scroll.destinoId}`,
     scroll.samples,
+    scroll.salto,
     hMin,
-    hMax,
-    nScroll
+    hMax
   );
-  const tolScroll = nScroll > 1 ? 30 : 12;
-  if (
-    arcoScroll < hMin - 1 ||
-    arcoScroll > (scroll.salto?.detail?.h ?? hMax) + tolScroll
-  ) {
-    fail(
-      `${width}px arco scroll manual ${arcoScroll}px fuera de rango (mín ${hMin})`
-    );
-  }
   const panelScroll = await panelTrayectoria(
     browser,
     page,
@@ -543,6 +555,27 @@ async function main() {
   const browser = await chromium.launch();
 
   try {
+    console.log("\n=== Estabilidad arco 390px C15 habilidades (3 corridas) ===\n");
+    for (let run = 1; run <= 3; run++) {
+      const pSt = await browser.newPage({ viewport: { width: 390, height: 844 } });
+      await setupEventLog(pSt);
+      await pSt.goto(baseUrl, { waitUntil: "networkidle" });
+      await waitFonts(pSt);
+      await waitAparicionInicial(pSt);
+      const { segmentArcs } = await criterio15Nav(
+        pSt,
+        390,
+        "#habilidades",
+        "habilidades",
+        { soloArco: true }
+      );
+      const maxA = Math.max(...segmentArcs);
+      console.log(
+        `  corrida ${run}/3: saltitos=[${segmentArcs.map((a) => a.toFixed(1)).join(", ")}] max=${maxA.toFixed(1)}px`
+      );
+      await pSt.close();
+    }
+
     console.log("\n=== Comprobaciones de caja renderizada ===\n");
 
     for (const width of [390, 1440]) {
