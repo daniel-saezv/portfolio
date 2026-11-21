@@ -1,6 +1,6 @@
 # Portfolio
 
-Sitio estático personal de **Daniel Saez**: presentación, trayectoria y enlaces. Publicado en [https://daniel-saezv.github.io/portfolio/](https://daniel-saezv.github.io/portfolio/).
+Sitio estático personal de **Daniel Saez** con las secciones **Sobre mí**, **Habilidades** y **Enlaces**. Publicado en [https://daniel-saezv.github.io/portfolio/](https://daniel-saezv.github.io/portfolio/).
 
 ## Stack
 
