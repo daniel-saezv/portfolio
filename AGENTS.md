@@ -6,7 +6,7 @@ Página estática de portfolio (HTML, CSS y JS vanilla) desplegada en GitHub Pag
 
 - **Sitio publicado:** `index.html`, `styles.css`, `script.js` (sin build ni dependencias en runtime).
 - **CI:** `.github/workflows/deploy.yml` copia solo esos tres archivos a `_site` y despliega con GitHub Actions.
-- **Pruebas locales:** `tests/portfolio.spec.mjs` (Playwright; no se publica).
+- **Pruebas locales:** `tests/portfolio.spec.mjs`, `tests/motion.spec.mjs` y `tests/motion-render.spec.mjs` (Playwright; no se publican).
 
 ## Comandos verificados
 
@@ -14,9 +14,9 @@ Página estática de portfolio (HTML, CSS y JS vanilla) desplegada en GitHub Pag
 # Servir en local (cualquier servidor estático estático sobre la raíz del repo)
 python3 -m http.server 8080
 
-# Pruebas headless (375 px y 1440 px, capturas en /opt/cursor/artifacts)
+# Pruebas headless (criterios §11.10, capturas en /opt/cursor/artifacts)
 npx --yes playwright install chromium
-node tests/portfolio.spec.mjs
+npm test
 ```
 
 No hay paso de build del sitio.
@@ -30,12 +30,12 @@ No hay paso de build del sitio.
 ### Checks recomendados en PR
 
 - Validación del workflow YAML.
-- Ejecución manual o en agente de `tests/portfolio.spec.mjs` antes de merge.
+- Ejecución manual o en agente de `npm test` antes de merge.
 
 ## Cursor Cloud
 
 1. Instalar navegador de prueba: `npx --yes playwright install chromium`.
-2. Ejecutar `node tests/portfolio.spec.mjs` desde la raíz del repositorio.
+2. Ejecutar `npm test` desde la raíz del repositorio.
 3. No se requieren secretos para pruebas locales; el despliegue usa `GITHUB_TOKEN` / permisos de Pages del repositorio.
 
 ## Plataformas de agentes

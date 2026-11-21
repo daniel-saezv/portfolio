@@ -226,6 +226,7 @@ a {
   font-weight: 600;
   border-radius: 10px;
   white-space: nowrap;
+  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav__enlace::after {
@@ -239,6 +240,9 @@ a {
   background: var(--sol-400);
   transform: scaleX(0);
   transform-origin: left;
+  transition:
+    transform 160ms cubic-bezier(0.4, 0, 1, 1),
+    opacity 160ms cubic-bezier(0.4, 0, 1, 1);
 }
 
 .nav__enlace:hover {
@@ -248,6 +252,9 @@ a {
 .nav__enlace:hover::after {
   transform: scaleX(0.4);
   opacity: 0.6;
+  transition:
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav__enlace[aria-current="true"] {
@@ -257,6 +264,9 @@ a {
 .nav__enlace[aria-current="true"]::after {
   transform: scaleX(1);
   opacity: 1;
+  transition:
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nav__enlace:focus-visible {
@@ -341,11 +351,18 @@ main {
   transform: translateY(0);
 }
 
+.js .seccion {
+  transition:
+    opacity 480ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 480ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .js .seccion,
   .js .seccion[data-entrada] {
     opacity: 1;
     transform: none;
+    transition: none;
   }
 }
 
@@ -670,4 +687,128 @@ main {
 
 #brote-barriga {
   filter: drop-shadow(0 0 3px rgba(168, 240, 230, 0.8));
+}
+
+.brote[data-estado="reposo"] svg {
+  transform: none;
+}
+
+.brote[data-estado="salto"] svg {
+  transform: scale(0.86, 1.18);
+}
+
+.brote[data-estado="salto"] #brote-hoja-izq {
+  transform: rotate(-14deg);
+}
+
+.brote[data-estado="salto"] #brote-hoja-der {
+  transform: rotate(14deg);
+}
+
+.brote[data-estado="aterrizaje"] svg {
+  transform: scale(1.2, 0.8);
+}
+
+.brote[data-estado="aterrizaje"] #brote-hoja-izq {
+  transform: rotate(12deg);
+}
+
+.brote[data-estado="aterrizaje"] #brote-hoja-der {
+  transform: rotate(-12deg);
+}
+
+.brote #brote-ojo-izq {
+  transform-box: view-box;
+  transform-origin: 24.5px 36px;
+}
+
+.brote #brote-ojo-der {
+  transform-box: view-box;
+  transform-origin: 39.5px 36px;
+}
+
+.brote[data-estado="reposo"] svg {
+  animation: brote-respirar 3200ms cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+.brote[data-estado="reposo"] #brote-barriga {
+  animation: brote-brillo 3200ms cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+.brote[data-estado="reposo"] #brote-ojo-izq,
+.brote[data-estado="reposo"] #brote-ojo-der {
+  animation: brote-parpadeo 4200ms infinite;
+}
+
+.brote[data-estado="reposo"] #brote-hoja-izq {
+  animation: brote-balanceo 2600ms cubic-bezier(0.37, 0, 0.63, 1) infinite;
+}
+
+.brote[data-estado="reposo"] #brote-hoja-der {
+  animation: brote-balanceo 2600ms cubic-bezier(0.37, 0, 0.63, 1) -1300ms
+    infinite;
+}
+
+.brote.pausada svg,
+.brote.pausada svg * {
+  animation-play-state: paused !important;
+}
+
+@keyframes brote-respirar {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  50% {
+    transform: scale(0.985, 1.03);
+  }
+}
+
+@keyframes brote-brillo {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes brote-parpadeo {
+  0%,
+  96.19% {
+    transform: scaleY(1);
+    animation-timing-function: cubic-bezier(0.4, 0, 1, 1);
+  }
+  98.1% {
+    transform: scaleY(0.1);
+    animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes brote-balanceo {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(4deg);
+  }
+  75% {
+    transform: rotate(-4deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brote svg {
+    transform: none !important;
+  }
+
+  .brote svg,
+  .brote svg * {
+    animation: none !important;
+  }
 }
