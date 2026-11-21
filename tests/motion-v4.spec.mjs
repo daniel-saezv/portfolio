@@ -255,18 +255,42 @@ function analizarC20(frames, ev, secInicial, marcadores = {}) {
   };
 }
 
-function ventanaCarrilMs(salto, aterri) {
+function anticipacionMs(salto, eventos, aterri) {
   const n =
     typeof salto?.detail?.n === "number" && salto.detail.n > 0
       ? salto.detail.n
       : 1;
   const core = n * 240 + (n - 1) * 40;
-  const A = Math.max(
-    0,
-    aterri?.t != null && salto?.t != null
-      ? Math.round(aterri.t - salto.t - core)
-      : 0
-  );
+  if (salto.detail?.retarget || salto.detail?.estabaEnCarril) {
+    return 0;
+  }
+  if (aterri?.t != null && salto?.t != null) {
+    return Math.max(0, Math.round(aterri.t - salto.t - core));
+  }
+  const prev = eventos?.findLast?.(
+    (e) => e.nombre === "brote:salto" && e.t < salto.t
+  ) ?? [...(eventos || [])]
+    .filter((e) => e.nombre === "brote:salto" && e.t < salto.t)
+    .at(-1);
+  if (
+    prev &&
+    salto.t - prev.t <
+      core + (salto.detail.origen === "ancla" ? 200 : 80)
+  ) {
+    return 0;
+  }
+  if (salto.detail?.origen === "ancla" || salto.detail?.origen === "foco") {
+    return 80;
+  }
+  return 0;
+}
+
+function ventanaCarrilMs(salto, aterri, eventos = []) {
+  const n =
+    typeof salto?.detail?.n === "number" && salto.detail.n > 0
+      ? salto.detail.n
+      : 1;
+  const A = anticipacionMs(salto, eventos, aterri);
   const tSalidaFin = A + 0.4 * 240;
   const tVueltaInicio =
     A + (n - 1) * (240 + 40) + 0.6 * 240;
@@ -303,7 +327,11 @@ function medirCarrilEnFrames(frames, eventos, etiqueta) {
         e.t >= salto.t &&
         e.detail?.seccion === dest
     );
-    const { tSalidaFin, tVueltaInicio, n } = ventanaCarrilMs(salto, aterri);
+    const { tSalidaFin, tVueltaInicio, n } = ventanaCarrilMs(
+      salto,
+      aterri,
+      eventos
+    );
     const t0 = t0Salto(frames, salto);
     const enCarril = frames.filter((f) => {
       const tr = f.t - t0;
@@ -339,9 +367,13 @@ function medirCarrilEnFrames(frames, eventos, etiqueta) {
       });
       continue;
     }
+    let violBloque = 0;
     for (const d of desv) {
       framesEnCarril += 1;
-      if (d > 1 + 1e-6) violaciones += 1;
+      if (d > 1 + 1e-6) {
+        violaciones += 1;
+        violBloque += 1;
+      }
     }
     bloques.push({
       etiqueta,
@@ -354,6 +386,7 @@ function medirCarrilEnFrames(frames, eventos, etiqueta) {
       xCarril: xCarrilRef,
       carrilMs: salto.detail?.carrilMs ?? Math.round(tVueltaInicio - tSalidaFin),
       modo: "carril",
+      violacionesBloque: violBloque,
     });
   }
   return { violaciones, bloques, framesEnCarril };
@@ -397,6 +430,394 @@ function verificarC27(eventos, etiqueta) {
   return { viol, viajes };
 }
 
+function analizarRetargetEnCarril(frames, eventos, nuevoDest) {
+  const saltos = eventos.filter(
+    (e) => e.nombre === "brote:salto" && e.detail?.n > 0
+  );
+  const primero = saltos.find((s) => s.detail?.carril && !s.detail?.recto);
+  const segundo = saltos.filter((s) => s.t > (primero?.t ?? 0)).at(-1);
+  if (!primero || !segundo) {
+    return {
+      ok: false,
+      motivo: "faltan saltos con carril y retarget",
+      saltos: saltos.length,
+    };
+  }
+  const tClick = segundo.t;
+  const { tSalidaFin, tVueltaInicio } = ventanaCarrilMs(
+    primero,
+    null,
+    eventos
+  );
+  const { tSalidaFin: t2Salida, tVueltaInicio: t2Vuelta } = ventanaCarrilMs(
+    segundo,
+    null,
+    eventos
+  );
+  let violCarril = 0;
+  let framesCarril = 0;
+  let maxJump = 0;
+  let maxDeltaScroll = 0;
+  let maxDesv = 0;
+  const muestrasViol = [];
+  const medirVentana = (t0, tFin, tVuelta, dest, tMax, graceMs = 0) => {
+    for (const f of frames) {
+      const tr = f.t - t0;
+      if (tr < tFin + graceMs || tr >= tVuelta || f.t > tMax) continue;
+      if (f.estado !== "salto") continue;
+      const xC = xCarrilVista(f, dest);
+      const desv = Math.abs(f.brote.left - xC);
+      maxDesv = Math.max(maxDesv, desv);
+      framesCarril++;
+      if (desv > 1 + 1e-6) {
+        violCarril++;
+        if (muestrasViol.length < 8) {
+          muestrasViol.push({
+            tr: Math.round(tr),
+            left: f.brote.left,
+            xCarril: xC,
+            desv: Math.round(desv * 100) / 100,
+            dest,
+          });
+        }
+      }
+    }
+  };
+  medirVentana(
+    primero.t,
+    tSalidaFin,
+    tVueltaInicio,
+    primero.detail.hasta,
+    tClick - 1
+  );
+  medirVentana(
+    segundo.t,
+    t2Salida,
+    t2Vuelta,
+    segundo.detail.hasta,
+    Infinity,
+    20
+  );
+  for (let i = 1; i < frames.length; i++) {
+    const f = frames[i];
+    const p = frames[i - 1];
+    if (f.scrollY !== p.scrollY) {
+      maxDeltaScroll = Math.max(
+        maxDeltaScroll,
+        Math.abs(f.brote.top - p.brote.top)
+      );
+    }
+  }
+  const idxClick = frames.findIndex((f) => f.t >= tClick - 1);
+  if (idxClick > 0) {
+    const f = frames[idxClick];
+    const p = frames[idxClick - 1];
+    maxJump = Math.max(
+      maxJump,
+      Math.abs(f.brote.left - p.brote.left),
+      Math.abs(f.brote.top - p.brote.top)
+    );
+  }
+  const aterri = eventos.find(
+    (e) =>
+      e.nombre === "brote:aterrizaje" &&
+      e.t >= segundo.t &&
+      e.detail?.seccion === nuevoDest
+  );
+  const reposo = eventos.find(
+    (e) =>
+      e.nombre === "brote:reposo" &&
+      e.t >= segundo.t &&
+      e.detail?.seccion === nuevoDest
+  );
+  const okC27 =
+    (segundo.detail.recto
+      ? segundo.detail.carrilMs === 0
+      : (segundo.detail.carrilMs ?? 0) >= 120) &&
+    !segundo.detail.recto;
+  return {
+    maxDesv,
+    muestrasViol,
+    ok:
+      violCarril === 0 &&
+      maxJump <= 2.05 &&
+      maxDeltaScroll <= 2.05 &&
+      !!aterri &&
+      !!reposo &&
+      okC27,
+    violCarril,
+    framesCarril,
+    maxJump,
+    maxDeltaScroll,
+    primero: primero.detail,
+    segundo: segundo.detail,
+    carrilMs1: primero.detail.carrilMs,
+    carrilMs2: segundo.detail.carrilMs,
+    tClick,
+    ventana1: [tSalidaFin, tVueltaInicio],
+    ventana2: [t2Salida, t2Vuelta],
+    aterrizaje: !!aterri,
+    reposo: !!reposo,
+  };
+}
+
+function analizarRetargetSalida(
+  frames,
+  eventos,
+  nuevoDest,
+  clickT,
+  saltoT,
+  metaSalida
+) {
+  const primero =
+    (typeof saltoT === "number"
+      ? eventos.find(
+          (e) =>
+            e.nombre === "brote:salto" &&
+            e.detail?.hasta === "enlaces" &&
+            Math.abs(e.t - saltoT) <= 3
+        )
+      : null) ||
+    eventos
+      .filter(
+        (e) =>
+          e.nombre === "brote:salto" &&
+          e.detail?.hasta === "enlaces" &&
+          e.detail?.carril &&
+          !e.detail?.recto
+      )
+      .at(-1);
+  const segundo = eventos.find(
+    (e) =>
+      e.nombre === "brote:salto" &&
+      e.detail?.retarget &&
+      e.detail?.hasta === nuevoDest &&
+      primero &&
+      e.t > primero.t
+  );
+  if (!primero || !segundo) {
+    return { ok: false, motivo: "sin par retarget salida" };
+  }
+  const tSalidaFin =
+    primero.detail.tSalidaFinMs ??
+    ventanaCarrilMs(primero, null, eventos).tSalidaFin;
+  const tClick =
+    typeof clickT === "number" ? clickT : segundo.t;
+  const deltaMs = Math.round(
+    metaSalida?.deltaMs ?? tClick - (primero?.t ?? tClick)
+  );
+  if (deltaMs >= tSalidaFin - 8) {
+    return {
+      ok: false,
+      motivo: "retarget demasiado tarde para salida",
+      deltaMs,
+      deltaSaltoMs: Math.round(segundo.t - primero.t),
+      tSalidaFin: Math.round(tSalidaFin),
+      tClick,
+    };
+  }
+  const idxEv = frames.findIndex((f) => f.t >= segundo.t - 2);
+  const idxClick = frames.findIndex((f) => f.t >= tClick - 2);
+  const idx = idxEv > 0 ? idxEv : idxClick;
+  let maxJump = 0;
+  if (idx > 0) {
+    maxJump = Math.max(
+      Math.abs(frames[idx].brote.left - frames[idx - 1].brote.left),
+      Math.abs(frames[idx].brote.top - frames[idx - 1].brote.top)
+    );
+  }
+  const okSalida =
+    !segundo.detail.estabaEnCarril && metaSalida?.tr != null
+      ? metaSalida.tr < tSalidaFin - 12
+      : true;
+  const okC27 = segundo.detail.recto
+    ? segundo.detail.carrilMs === 0
+    : (segundo.detail.carrilMs ?? 0) >= 120;
+  return {
+    ok: maxJump <= 2.05 && okC27 && okSalida,
+    maxJump,
+    deltaMs,
+    okSalida,
+    limiteSalidaMs: Math.round(tSalidaFin),
+    primero: primero.detail,
+    segundo: segundo.detail,
+  };
+}
+
+async function prepararViajeCarril(page, baseUrl, width) {
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await waitAparicionInicial(page);
+  if (width === 390) {
+    await page.click('nav a[href="#habilidades"]');
+    await waitReposoEnSeccion(page, "habilidades", 12000);
+  }
+}
+
+async function esperarFaseSalto(page, fase, hasta = null) {
+  return page.waitForFunction(
+    ({ f, dest }) => {
+      const salto = window.__eventos
+        ?.filter(
+          (e) =>
+            e.nombre === "brote:salto" &&
+            e.detail?.carril &&
+            !e.detail?.recto &&
+            (dest ? e.detail.hasta === dest : true)
+        )
+        .at(-1);
+      if (!salto) return false;
+      const tSalidaFin = salto.detail.tSalidaFinMs ?? 176;
+      const carrilMs = salto.detail.carrilMs ?? 328;
+      const tVuelta = tSalidaFin + carrilMs;
+      const tr = performance.now() - salto.t;
+      const m = document.getElementById("mascota");
+      const enVuelo = m.dataset.estado === "salto" && m.getAnimations().length > 0;
+      if (f === "carril") {
+        return (
+          enVuelo &&
+          tr >= tSalidaFin + 24 &&
+          tr <= tVuelta - 40
+        );
+      }
+      return enVuelo && tr >= 52 && tr < tSalidaFin - 24;
+    },
+    { f: fase, dest: hasta },
+    { timeout: 12000, polling: 4 }
+  );
+}
+
+async function ejecutarRetargetCarril(page, baseUrl, width, nuevoHref, nuevoId) {
+  await prepararViajeCarril(page, baseUrl, width);
+  await instalarFrameLog(page);
+  await page.evaluate(() => window.__rafArm());
+  await page.click('nav a[href="#enlaces"]');
+  await page.waitForFunction(
+    () =>
+      window.__eventos?.some(
+        (e) =>
+          e.nombre === "brote:salto" &&
+          e.detail?.hasta === "enlaces" &&
+          e.detail?.carril
+      ),
+    null,
+    { timeout: 8000 }
+  );
+  await esperarFaseSalto(page, "carril");
+  await page.click(`nav a[href="${nuevoHref}"]`);
+  await waitReposoEnSeccion(page, nuevoId, 16000);
+  const frames = await page.evaluate(() => {
+    window.__rafStop();
+    return window.__rafFrames;
+  });
+  const ev = await page.evaluate(() => window.__eventos);
+  const resultado = analizarRetargetEnCarril(frames, ev, nuevoId);
+  const carrilR2 = medirCarrilEnFrames(frames, ev, `retarget-${width}`);
+  verificarC27(ev, `${width}px retarget carril`);
+  guardarJson(`retarget-carril-${width}.json`, {
+    width,
+    ...resultado,
+    carrilR2,
+    frames: frames.length,
+    muestrasViol: resultado.muestrasViol,
+  });
+  guardarJson(`frames-retarget-carril-${width}.json`, frames);
+  return { frames, ev, resultado, carrilR2 };
+}
+
+async function ejecutarRetargetSalida(page, baseUrl, width, nuevoHref, nuevoId) {
+  await prepararViajeCarril(page, baseUrl, width);
+  await instalarFrameLog(page);
+  await page.evaluate(() => window.__rafArm());
+  await page.click('nav a[href="#enlaces"]');
+  const metaSalida = await page.evaluate(async (href) => {
+    const pick = () =>
+      window.__eventos
+        ?.filter(
+          (e) =>
+            e.nombre === "brote:salto" &&
+            e.detail?.hasta === "enlaces" &&
+            e.detail?.carril &&
+            !e.detail?.recto
+        )
+        .at(-1);
+    const t0 = performance.now();
+    while (!pick() && performance.now() - t0 < 8000) {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    const s = pick();
+    if (!s) return { ok: false, motivo: "sin salto enlaces" };
+    const fin = s.detail.tSalidaFinMs ?? 176;
+    while (performance.now() - t0 < 8000) {
+      const tr = performance.now() - s.t;
+      const m = document.getElementById("mascota");
+      if (
+        m?.dataset.estado === "salto" &&
+        m.getAnimations().length > 0 &&
+        tr >= 48 &&
+        tr < fin - 14
+      ) {
+        const clickT = Math.round(performance.now());
+        window.__retargetSalidaClickT = clickT;
+        document.querySelector(`nav a[href="${href}"]`).click();
+        return {
+          ok: true,
+          sT: s.t,
+          clickT,
+          deltaMs: clickT - s.t,
+          tr: Math.round(tr),
+        };
+      }
+      if (tr >= fin - 14) {
+        return { ok: false, motivo: "perdió ventana salida", tr: Math.round(tr), sT: s.t };
+      }
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    return { ok: false, motivo: "timeout ventana salida" };
+  }, nuevoHref);
+  if (!metaSalida?.ok) {
+    guardarJson(`retarget-salida-${width}.json`, { width, ...metaSalida });
+    return {
+      frames: [],
+      ev: [],
+      resultado: { ok: false, ...metaSalida },
+      carrilR2: { violaciones: 0 },
+      violRelanzado: 0,
+    };
+  }
+  const clickT = metaSalida.clickT;
+  await waitReposoEnSeccion(page, nuevoId, 16000);
+  const frames = await page.evaluate(() => {
+    window.__rafStop();
+    return window.__rafFrames;
+  });
+  const ev = await page.evaluate(() => window.__eventos);
+  const resultado = analizarRetargetSalida(
+    frames,
+    ev,
+    nuevoId,
+    clickT,
+    metaSalida.sT,
+    metaSalida
+  );
+  resultado.metaSalida = metaSalida;
+  const carrilR2 = medirCarrilEnFrames(frames, ev, `retarget-salida-${width}`);
+  const bloqueRelanzado = carrilR2.bloques.filter((b) => b.dest === nuevoId).at(-1);
+  const violRelanzado =
+    bloqueRelanzado?.violacionesBloque ??
+    (bloqueRelanzado?.modo === "recto" ? 0 : carrilR2.violaciones);
+  resultado.violRelanzado = violRelanzado;
+  verificarC27(ev.slice(-6), `${width}px retarget salida`);
+  guardarJson(`retarget-salida-${width}.json`, {
+    width,
+    ...resultado,
+    carrilR2,
+    violRelanzado,
+    frames: frames.length,
+  });
+  guardarJson(`frames-retarget-salida-${width}.json`, frames);
+  return { frames, ev, resultado, carrilR2, violRelanzado };
+}
+
 async function capturarCasosTrayectoria(page, baseUrl, width) {
   const casos = {};
   async function viaNav(href, clave) {
@@ -436,6 +857,11 @@ async function capturarCasosTrayectoria(page, baseUrl, width) {
     casos[clave] = {
       width,
       href,
+      navegacionUsuario: true,
+      descripcion:
+        clave === "carril-n2"
+          ? "Nav real: clic en enlace del nav (tras preparación de sección)"
+          : "Nav real: clic en enlace del nav",
       detail: payload.salto?.detail,
       barrido: payload.barrido,
       frames: payload.frames.length,
@@ -1074,6 +1500,43 @@ async function main() {
       await pCasos.close();
     }
     guardarJson("casos-trayectoria-resumen.json", casosEvidencia);
+
+    for (const width of [390, 1440]) {
+      const height = width === 390 ? 844 : 900;
+      const pR = await browser.newPage({ viewport: { width, height } });
+      await setupEventLog(pR);
+      await pR.goto(baseUrl, { waitUntil: "networkidle" });
+      const rC = await ejecutarRetargetCarril(
+        pR,
+        baseUrl,
+        width,
+        "#sobre-mi",
+        "sobre-mi"
+      );
+      reg(
+        26,
+        rC.resultado.ok && rC.carrilR2.violaciones === 0,
+        `${width}px retarget en carril: viol=${rC.resultado.violCarril} maxΔleft=${rC.resultado.maxDesv?.toFixed(2)}px frames=${rC.resultado.framesCarril} jump=${rC.resultado.maxJump.toFixed(2)}px carrilMs2=${rC.resultado.segundo?.carrilMs}`
+      );
+      await pR.close();
+
+      const pS = await browser.newPage({ viewport: { width, height } });
+      await setupEventLog(pS);
+      await pS.goto(baseUrl, { waitUntil: "networkidle" });
+      const rS = await ejecutarRetargetSalida(
+        pS,
+        baseUrl,
+        width,
+        "#habilidades",
+        "habilidades"
+      );
+      reg(
+        26,
+        rS.resultado.ok && (rS.violRelanzado ?? 0) === 0,
+        `${width}px retarget salida translateX: Δt=${rS.resultado.deltaMs ?? "?"}ms jump=${(rS.resultado.maxJump ?? 0).toFixed(2)}px carrilMs2=${rS.resultado.segundo?.carrilMs ?? "?"} violRel=${rS.violRelanzado ?? "?"}`
+      );
+      await pS.close();
+    }
 
     const v390 = await grabarDemoCompleta(
       browser,

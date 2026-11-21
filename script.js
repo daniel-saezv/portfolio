@@ -58,6 +58,7 @@
   let bloqueo = null;
   let anims = [];
   let viajando = false;
+  let viajeUsaCarril = false;
   let viajeDestino = null;
   let tAterrizaje = 0;
   let aterrizado = true;
@@ -192,8 +193,23 @@
     const a0I = ang(hojaI);
     const a0D = ang(hojaD);
     const opac = parseFloat(getComputedStyle(mascota).opacity) || 1;
-    const retarget = viajando;
+    const retarget =
+      viajando ||
+      mascota.dataset.estado === "salto" ||
+      mascota.getAnimations().length > 0;
+    const refCarril =
+      viajando && viajeDestino ? viajeDestino : hasta;
+    const xLaneRef = Math.max(
+      4,
+      xTextoDoc(refCarril) - scrollX - mascota.offsetWidth - 8
+    );
     const xAddInicio = viajando ? offsetXAddActual() : 0;
+    const laneLeftNow =
+      Math.abs(mascota.getBoundingClientRect().left - xLaneRef) <= 2.5;
+    const estabaEnCarril =
+      retarget &&
+      (laneLeftNow ||
+        Math.abs(mascota.getBoundingClientRect().left - xLaneRef) <= 1.5);
     cancelar();
     const o0 = { x: mV.e, y: mV.f };
     fijar(o0);
@@ -270,6 +286,11 @@
     } else {
       useCarril = true;
     }
+    if (retarget && estabaEnCarril) {
+      recto = false;
+      useCarril = true;
+      if (nS === 1) nS = 2;
+    }
     nS = Math.max(1, nS);
     const hMin = 0.5 * s;
     const hCap = Math.max(hMin, 1.5 * s - (s <= 36 ? 3 : 4));
@@ -289,9 +310,10 @@
     const xCarril = Math.max(4, xTexto - s - 8);
     const xCarrilV = Math.max(4, xTexto - scrollX - s - 8);
     const enCarrilAhora =
-      useCarril &&
-      !recto &&
-      Math.abs(mascota.getBoundingClientRect().left - xCarrilV) <= 1.5;
+      (retarget && estabaEnCarril) ||
+      (useCarril &&
+        !recto &&
+        Math.abs(mascota.getBoundingClientRect().left - xCarrilV) <= 1.5);
     const posSaltoFraccion = (hopI, frac) => {
       const p0 = {
         x: o.x + (hopI / nS) * (d.x - o.x),
@@ -396,7 +418,9 @@
           : offSalida;
       if (origen === "scroll" || enCarrilAhora) {
         const k0 = docX(kV[0].transform);
-        kX[0].transform = `translateX(${xAdd0 + xLane - k0}px)`;
+        kX[0].transform = `translateX(${
+          (enCarrilAhora ? 0 : xAdd0) + xLane - k0
+        }px)`;
         addKx(
           margenDesde,
           docX(
@@ -462,6 +486,7 @@
     mascota.classList.add("en-viaje");
     mascota.style.willChange = "transform";
     mascota.style.opacity = "";
+    viajeUsaCarril = useCarril;
     viajando = true;
     scrollViajeY = scrollY;
     aterrizado = false;
@@ -478,6 +503,11 @@
       recto,
       barridoCruza: barrido?.cruza ?? false,
       carrilMs: useCarril ? Math.round(tVueltaCarril - tSalidaCarril) : 0,
+      tSalidaFinMs: Math.round(tSalidaCarril),
+      estabaEnCarril: !!estabaEnCarril,
+      laneLeftNow,
+      retarget,
+      viajeUsaCarrilPrev: !!viajeUsaCarril,
     });
     window.__ultimoBarrido = barrido;
     window.__barridoCruzaTexto = barridoCruzaTexto;
