@@ -16,12 +16,17 @@ python3 -m http.server 8080
 
 Abre [http://localhost:8080](http://localhost:8080).
 
-## Pruebas
-
-Instala el navegador de Playwright (una vez) y ejecuta la suite:
+## Cómo preparar el entorno
 
 ```bash
-npx --yes playwright install chromium
+bash scripts/setup
+```
+
+## Pruebas
+
+Con el entorno preparado, ejecuta la suite:
+
+```bash
 npm test
 ```
 
@@ -45,7 +50,3 @@ El workflow [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) (`Des
 2. **deploy:** publica el artefacto en el entorno `github-pages`.
 
 GitHub Pages debe tener como origen **GitHub Actions** en la configuración del repositorio.
-
----
-
-Las instrucciones para agentes de código están en [`AGENTS.md`](AGENTS.md).

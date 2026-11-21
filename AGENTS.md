@@ -18,6 +18,8 @@
 14. Sin ficheros `.md` largos de planes o decisiones; el porqué va en la PR o en el commit.
 15. Prosa breve y sin relleno en PRs, commits y documentación.
 16. No cambies alcance, diseño ni prioridades por tu cuenta; si algo te bloquea, dilo con exactitud.
+17. La preparación del entorno vive en `scripts/setup`. Es idempotente. Los archivos de cada proveedor de agentes en la nube solo lo invocan. Si cambias dependencias, toolchain o pasos de arranque, actualiza el script y comprueba que esos envoltorios siguen funcionando. Si el proyecto usa un proveedor sin envoltorio, créalo.
+18. Al lanzar un agente en la nube, elige y justifica plataforma y modelo siguiendo la skill `elegir-modelo`.
 
 ## Mantenimiento de skills
 
@@ -33,7 +35,7 @@ Hay dos clases de skills:
 
    Esas skills pueden nombrar otras de pstack que no vienen en el repositorio (por ejemplo, `blast-radius` menciona `why` y `arena`). Si las necesitas, instálalas con `npx skills add cursor/plugins --skill <nombre>` o con `/add-plugin pstack` en Cursor.
 
-2. **Propias del repositorio** (español): `setup-proyecto`, `pr-lista`, `technical-writing` y `how`. Viven en `.agents/skills/`; para que Claude Code las vea, mantén los enlaces en `.claude/skills/` apuntando a `.agents/skills/<nombre>`.
+2. **Propias del repositorio** (español): `setup-proyecto`, `entorno-agentes`, `elegir-modelo`, `pr-lista`, `technical-writing` y `how`. Viven en `.agents/skills/`; para que Claude Code las vea, mantén los enlaces en `.claude/skills/` apuntando a `.agents/skills/<nombre>`.
 
 Para actualizar las skills bloqueadas en `skills-lock.json`:
 
@@ -66,7 +68,7 @@ Página estática de portfolio (HTML, CSS y JS vanilla) desplegada en GitHub Pag
 python3 -m http.server 8080
 
 # Pruebas headless (criterios §11.10, capturas en /opt/cursor/artifacts)
-npx --yes playwright install chromium
+bash scripts/setup
 npm test
 ```
 
@@ -85,7 +87,7 @@ No hay paso de build del sitio.
 
 ### Cursor Cloud
 
-1. Instalar navegador de prueba: `npx --yes playwright install chromium`.
+1. Preparar el entorno: `bash scripts/setup` (`.cursor/environment.json` lo invoca en el Build).
 2. Ejecutar `npm test` desde la raíz del repositorio.
 3. No se requieren secretos para pruebas locales; el despliegue usa `GITHUB_TOKEN` / permisos de Pages del repositorio.
 
@@ -109,17 +111,11 @@ Notas aplicables a cualquier repositorio de **daniel-saezv** al usar agentes en 
 
 #### Copilot: elegir y comprobar el modelo
 
-Verificado en pruebas reales el **2026-11-21** (issues #9 y #10; PR #11 cerrada sin merge).
+Sigue la skill `elegir-modelo`. Asigna la issue a `copilot-swe-agent[bot]` y pasa `agent_assignment.model`. Sin `model`, Copilot usa Auto.
 
-- Para elegir el modelo, asigna la issue a `copilot-swe-agent[bot]` y pasa `agent_assignment.model`.
-- **REST:** `POST /repos/{owner}/{repo}/issues` o `POST /repos/{owner}/{repo}/issues/{n}/assignees`, cabecera `X-GitHub-Api-Version: 2022-11-28`, cuerpo con `assignees: ["copilot-swe-agent[bot]"]` y `agent_assignment: { target_repo, base_branch, custom_instructions, custom_agent, model }`.
-- **GraphQL:** `agentAssignment.model` con cabecera `GraphQL-Features: coding_agent_model_selection`.
-- Sin `model` se usa **Auto**.
-- Los valores son identificadores en minúsculas. Verificado: `claude-haiku-4.5`. La lista de valores de la doc REST está desactualizada: `claude-sonnet-4.6` ya no está disponible. Antes de elegir, consulta la página «Changing the AI model» en docs.github.com.
-- Un modelo inválido o no disponible **no** devuelve error HTTP: la issue se crea con **201** y Copilot comenta *The selected model isn't available…* sin abrir sesión ni PR. Revisa siempre los comentarios de la issue tras asignar.
-- El modelo realmente usado se lee en el log del workflow **Running Copilot cloud agent** (`GET /repos/{owner}/{repo}/actions/runs/{id}/logs`), línea `[cca-engine] Model resolution: … → resolved="<modelo>"`.
-- También aparece en el campo `model` de las sesiones de `GET /agents/tasks/{id}` (API `2026-03-10`), con permiso de repositorio **Agent tasks**. No figura en la PR.
-- El token compartido de los agentes es `GITHUB_COPILOT_TOKEN` (fine-grained PAT de daniel-saezv). Nunca se imprime ni se guarda en archivos.
+Un modelo que no está disponible no falla el HTTP: la issue se crea con **201** y Copilot comenta que el modelo no está disponible, sin abrir sesión ni PR. Revisa los comentarios de la issue tras asignar. El id resuelto está en el log del workflow **Running Copilot cloud agent**, en `resolved=`.
+
+El token compartido de los agentes es `GITHUB_COPILOT_TOKEN` (fine-grained PAT de daniel-saezv). Nunca se imprime ni se guarda en archivos.
 
 #### Configuración que solo puede hacer el dueño del repo
 
