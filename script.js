@@ -306,6 +306,25 @@
     return `scale(${x}, ${y})`;
   }
 
+  function cuandoEntradaLista(id, hecho) {
+    const s = document.getElementById(id);
+    if (!s || s.dataset.entrada === "final") {
+      hecho();
+      return;
+    }
+    const obs = new MutationObserver(() => {
+      if (s.dataset.entrada === "final") {
+        obs.disconnect();
+        hecho();
+      }
+    });
+    obs.observe(s, { attributes: true, attributeFilter: ["data-entrada"] });
+    setTimeout(() => {
+      obs.disconnect();
+      hecho();
+    }, 520);
+  }
+
   function aparecer(id, origen) {
     cancelar();
     fijar(puntoDeAnclaje(id));
@@ -374,7 +393,14 @@
         opt
       ),
     ];
-    anims[0].onfinish = fin;
+    let listas = 0;
+    const todasListas = () => {
+      listas += 1;
+      if (listas >= anims.length) fin();
+    };
+    anims.forEach((a) => {
+      a.onfinish = todasListas;
+    });
   }
 
   let pendiente = null;
@@ -575,7 +601,7 @@
     .forEach((a) => a.setAttribute("aria-current", "true"));
   mascota.style.opacity = "0";
   (document.fonts ? document.fonts.ready : Promise.resolve()).then(() =>
-    aparecer(activa, "inicio")
+    cuandoEntradaLista(activa, () => aparecer(activa, "inicio"))
   );
 
   reducido.addEventListener("change", () => {

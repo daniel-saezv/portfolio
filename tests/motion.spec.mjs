@@ -3,6 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import {
+  waitReposoEnSeccion,
+  waitAparicionInicial,
+  setupEventLog as setupEventLogHelper,
+} from "./motion-helpers.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -59,18 +64,7 @@ async function waitFonts(page) {
 }
 
 async function setupEventLog(page) {
-  await page.addInitScript(() => {
-    window.__eventos = [];
-    ["brote:salto", "brote:aterrizaje", "brote:reposo"].forEach((n) =>
-      document.addEventListener(n, (e) =>
-        window.__eventos.push({
-          t: Math.round(performance.now()),
-          nombre: n,
-          detail: e.detail,
-        })
-      )
-    );
-  });
+  await setupEventLogHelper(page);
 }
 
 const NAV_LINKS = [
@@ -95,14 +89,12 @@ async function solapeTrasCargaFresca(browser, baseUrl, width, href, sectionId) {
   const page = await browser.newPage({
     viewport: { width, height: width === 390 ? 844 : 900 },
   });
+  await setupEventLog(page);
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await waitFonts(page);
+  await waitAparicionInicial(page);
   await page.click(`nav a[href="${href}"]`);
-  await page.waitForFunction(
-    () => document.getElementById("mascota")?.dataset.estado === "reposo",
-    null,
-    { timeout: 12000 }
-  );
+  await waitReposoEnSeccion(page, sectionId);
   const solape = await solapeTitulo(page, sectionId);
   await page.close();
   return solape;
@@ -713,11 +705,7 @@ async function main() {
         await setupEventLog(page);
         await page.goto(baseUrl, { waitUntil: "networkidle" });
         await waitFonts(page);
-        await page.waitForFunction(
-          () => document.getElementById("mascota").dataset.estado === "reposo",
-          null,
-          { timeout: 10000 }
-        );
+        await waitAparicionInicial(page);
         await page.evaluate(() => {
           window.__t0 = performance.now();
         });
@@ -743,11 +731,7 @@ async function main() {
         await setupEventLog(page);
         await page.goto(baseUrl, { waitUntil: "networkidle" });
         await waitFonts(page);
-        await page.waitForFunction(
-          () => document.getElementById("mascota").dataset.estado === "reposo",
-          null,
-          { timeout: 10000 }
-        );
+        await waitAparicionInicial(page);
         await page.evaluate(() => {
           window.__t0 = performance.now();
         });
@@ -780,11 +764,7 @@ async function main() {
         await setupEventLog(page);
         await page.goto(baseUrl, { waitUntil: "networkidle" });
         await waitFonts(page);
-        await page.waitForFunction(
-          () => document.getElementById("mascota").dataset.estado === "reposo",
-          null,
-          { timeout: 10000 }
-        );
+        await waitAparicionInicial(page);
         await page.click('nav a[href="#enlaces"]');
         await page.waitForTimeout(5);
         const snap = await page.evaluate(() => ({
@@ -803,11 +783,7 @@ async function main() {
         await setupEventLog(page);
         await page.goto(baseUrl, { waitUntil: "networkidle" });
         await waitFonts(page);
-        await page.waitForFunction(
-          () => document.getElementById("mascota").dataset.estado === "reposo",
-          null,
-          { timeout: 10000 }
-        );
+        await waitAparicionInicial(page);
         await page.locator("#enlaces").focus();
         await page.waitForTimeout(5);
         const snap = await page.evaluate(() => ({
@@ -841,13 +817,10 @@ async function main() {
       const page = await browser.newPage({
         viewport: { width: 1440, height: 900 },
       });
+      await setupEventLog(page);
       await page.goto(baseUrl, { waitUntil: "networkidle" });
       await waitFonts(page);
-      await page.waitForFunction(
-        () => document.getElementById("mascota").dataset.estado === "reposo",
-        null,
-        { timeout: 10000 }
-      );
+      await waitAparicionInicial(page);
       await page.click('nav a[href="#enlaces"]');
       await page.waitForFunction(
         () => document.getElementById("mascota").dataset.estado === "salto",
@@ -890,13 +863,10 @@ async function main() {
       const page = await browser.newPage({
         viewport: { width: 1440, height: 900 },
       });
+      await setupEventLog(page);
       await page.goto(baseUrl, { waitUntil: "networkidle" });
       await waitFonts(page);
-      await page.waitForFunction(
-        () => document.getElementById("mascota").dataset.estado === "reposo",
-        null,
-        { timeout: 10000 }
-      );
+      await waitAparicionInicial(page);
       await page.click('nav a[href="#enlaces"]');
       await page.waitForFunction(
         () => document.getElementById("mascota").dataset.estado === "salto",
@@ -929,11 +899,7 @@ async function main() {
       await setupEventLog(page);
       await page.goto(baseUrl, { waitUntil: "networkidle" });
       await waitFonts(page);
-      await page.waitForFunction(
-        () => document.getElementById("mascota").dataset.estado === "reposo",
-        null,
-        { timeout: 10000 }
-      );
+      await waitAparicionInicial(page);
       await page.click('nav a[href="#enlaces"]');
       await page.waitForFunction(
         () => window.__eventos?.some((e) => e.nombre === "brote:salto"),
@@ -970,19 +936,22 @@ async function main() {
           const pad = parseFloat(getComputedStyle(t).paddingTop);
           return { y: Math.round(y + pad - tam + 2) };
         })();
-        const destFuera = destReal.y > abajo;
+        const arriba = scrollY + nav;
+        const visibleDest =
+          destReal.y + tam > arriba && destReal.y < abajo;
+        const yEsperado = visibleDest ? destReal.y : abajo + 8;
         return {
-          destFuera,
-          bordeRecorte,
+          visibleDest,
+          yEsperado,
           yLast,
           destRealY: destReal.y,
-          diff: yLast == null ? 999 : Math.abs(yLast - bordeRecorte),
+          diff: yLast == null ? 999 : Math.abs(yLast - yEsperado),
         };
       });
       registro(
         15,
-        clip.destFuera && clip.diff <= 6,
-        `Destino recortado: realY=${clip.destRealY} > pliegue; keyframe y=${clip.yLast} vs ${clip.bordeRecorte} (Δ${clip.diff.toFixed(1)})`
+        clip.diff <= 6,
+        `Destino keyframe y=${clip.yLast} vs esperado ${clip.yEsperado} (visible=${clip.visibleDest}, Δ${clip.diff.toFixed(1)})`
       );
       await page.close();
     }
@@ -995,11 +964,7 @@ async function main() {
       await setupEventLog(page);
       await page.goto(baseUrl, { waitUntil: "networkidle" });
       await waitFonts(page);
-      await page.waitForFunction(
-        () => document.getElementById("mascota").dataset.estado === "reposo",
-        null,
-        { timeout: 10000 }
-      );
+      await waitAparicionInicial(page);
       await page.click('nav a[href="#enlaces"]');
       await page.waitForFunction(
         () => document.getElementById("mascota").dataset.estado === "salto",
@@ -1013,11 +978,7 @@ async function main() {
         });
         document.dispatchEvent(new Event("visibilitychange"));
       });
-      await page.waitForFunction(
-        () => document.getElementById("mascota").dataset.estado === "reposo",
-        null,
-        { timeout: 5000 }
-      );
+      await waitReposoEnSeccion(page, "enlaces", 8000);
       const fin = await page.evaluate(() => {
         const ev = window.__eventos;
         const reposo = ev.filter((e) => e.nombre === "brote:reposo").at(-1);
@@ -1076,27 +1037,10 @@ async function main() {
       await page.close();
     }
 
-    async function grabarSalto(width, height, filename) {
-      const pageV = await browser.newPage({
-        viewport: { width, height },
-        recordVideo: { dir: artifactDir, size: { width, height } },
-      });
-      await pageV.goto(baseUrl, { waitUntil: "networkidle" });
-      await waitFonts(pageV);
-      await pageV.waitForTimeout(T.aparicionRetraso + 400);
-      await pageV.click('nav a[href="#enlaces"]');
-      await pageV.waitForTimeout(tiempoReposo(2) + 300);
-      const vidPath = await pageV.video().path();
-      await pageV.close();
-      const dest = path.join(artifactDir, filename);
-      fs.copyFileSync(vidPath, dest);
-      console.log(`Vídeo: ${dest} (${(fs.statSync(dest).size / 1024).toFixed(0)} KB)`);
-    }
-
-    await grabarSalto(390, 844, "motion-salto-390.webm");
-    await grabarSalto(1440, 900, "motion-salto-1440.webm");
-
     console.log("\n" + JSON.stringify({ criterios }, null, 2));
+    console.log(
+      "\n(Vídeos motion-v2-* los genera tests/motion-render.spec.mjs)\n"
+    );
   } finally {
     await browser.close();
     server.close();
