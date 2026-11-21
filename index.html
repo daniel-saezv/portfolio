@@ -114,6 +114,11 @@
             >
           </li>
           <li>
+            <a class="nav__enlace" href="#proyectos" data-destino="proyectos"
+              >Proyectos</a
+            >
+          </li>
+          <li>
             <a class="nav__enlace" href="#enlaces" data-destino="enlaces"
               >Enlaces</a
             >
@@ -217,6 +222,187 @@
           />
           <path
             d="M0 7 C 40 15, 80 15, 120 7 S 200 -1, 240 7 S 320 15, 360 7 S 440 -1, 480 7"
+            stroke="#A8F0E6"
+            stroke-opacity=".18"
+            stroke-width="1"
+            vector-effect="non-scaling-stroke"
+          />
+        </svg>
+      </div>
+
+      <section
+        class="seccion proyectos"
+        id="proyectos"
+        data-seccion
+        data-entrada="inicial"
+        aria-labelledby="t-proyectos"
+        tabindex="-1"
+      >
+        <h2 class="titulo-seccion" id="t-proyectos">Proyectos</h2>
+        <article class="proyecto" aria-labelledby="t-proyecto-plantilla">
+          <div class="proyecto__info">
+            <p class="proyecto__tipo">Plantilla de GitHub</p>
+            <h3 class="proyecto__nombre" id="t-proyecto-plantilla">
+              ai-agents-template
+            </h3>
+            <p class="proyecto__texto">
+              Una plantilla reutilizable para trabajar con agentes en la nube
+              en Cursor y GitHub Copilot.
+            </p>
+            <p class="proyecto__texto">
+              Da a los agentes las instrucciones y las herramientas para
+              configurar por su cuenta el entorno de desarrollo de un proyecto
+              desde cero.
+            </p>
+            <a
+              class="boton proyecto__boton"
+              href="https://github.com/daniel-saezv/ai-agents-template"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Ver en GitHub: repositorio ai-agents-template (se abre en una pestaña nueva)"
+              >Ver en GitHub</a
+            >
+          </div>
+          <div class="esquema">
+            <h4 class="esquema__titulo" id="t-esquema">Cómo funciona</h4>
+            <ol
+              class="esquema__lista"
+              role="list"
+              aria-labelledby="t-esquema"
+              data-esquema="pendiente"
+            >
+              <li class="paso" style="--paso: 0">
+                <span class="paso__nodo" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M12 19 V10 M12 10 C8 10 5.5 7.5 5 4 C9 4 11.5 6.5 12 10 Z M12 13 C16 13 18.5 10.5 19 7 C15 7 12.5 9.5 12 13 Z"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                <span class="paso__contenido">
+                  <strong class="paso__titulo"
+                    >Plantilla<span class="solo-lectores">:</span></strong
+                  >
+                  <span class="paso__detalle"
+                    >Creas tu repositorio a partir de la plantilla.</span
+                  >
+                </span>
+              </li>
+              <li class="paso" style="--paso: 1">
+                <span class="paso__nodo" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M6 3 H14 L19 8 V21 H6 Z M14 3 V8 H19 M9 12 H16 M9 16 H14"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                <span class="paso__contenido">
+                  <strong class="paso__titulo"
+                    >Reglas comunes<span class="solo-lectores">:</span></strong
+                  >
+                  <span class="paso__detalle"
+                    >Un único archivo de reglas para los agentes.</span
+                  >
+                </span>
+              </li>
+              <li class="paso" style="--paso: 2">
+                <span class="paso__nodo" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M4 15 C4 11 7 9 10 11 C12 7 17 8 17 12 C21 11 22 17 18 19 H6 C3 19 2 16 4 15 Z"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                <span class="paso__contenido">
+                  <strong class="paso__titulo"
+                    >Skills<span class="solo-lectores">:</span></strong
+                  >
+                  <span class="paso__detalle"
+                    >Instrucciones reutilizables para las tareas habituales.</span
+                  >
+                </span>
+              </li>
+              <li class="paso" style="--paso: 3">
+                <span class="paso__nodo" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M12 20 V9 M12 14 C8 14 5.5 11.5 5 8 C9 8 11.5 10.5 12 14 Z M12 11 C16 11 18.5 8.5 19 5 C15 5 12.5 7.5 12 11 Z M7 20 H17"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                <span class="paso__contenido">
+                  <strong class="paso__titulo"
+                    >Configuración autónoma<span class="solo-lectores"
+                      >:</span
+                    ></strong
+                  >
+                  <span class="paso__detalle"
+                    >Un agente explora el proyecto y prepara su entorno desde
+                    cero.</span
+                  >
+                </span>
+              </li>
+              <li class="paso paso--final" style="--paso: 4">
+                <span class="paso__nodo" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="4"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                    />
+                    <path
+                      d="M12 2 V5 M12 19 V22 M2 12 H5 M19 12 H22 M5 5 L7 7 M17 17 L19 19 M19 5 L17 7 M7 17 L5 19 M9.5 12 L11.5 14 L15 9.5"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                <span class="paso__contenido">
+                  <strong class="paso__titulo"
+                    >Entorno listo<span class="solo-lectores">:</span></strong
+                  >
+                  <span class="paso__detalle"
+                    >Cursor y GitHub Copilot arrancan con el entorno preparado,
+                    y CI revisa las skills en cada pull request.</span
+                  >
+                </span>
+              </li>
+            </ol>
+          </div>
+        </article>
+      </section>
+
+      <div class="separador" aria-hidden="true">
+        <svg viewBox="0 0 480 24" preserveAspectRatio="none" fill="none">
+          <path
+            d="M0 12 C 40 2, 80 2, 120 12 S 200 22, 240 12 S 320 2, 360 12 S 440 22, 480 12"
+            stroke="#2EC4B6"
+            stroke-opacity=".45"
+            stroke-width="1.5"
+            vector-effect="non-scaling-stroke"
+          />
+          <path
+            d="M0 17 C 40 9, 80 9, 120 17 S 200 25, 240 17 S 320 9, 360 17 S 440 25, 480 17"
             stroke="#A8F0E6"
             stroke-opacity=".18"
             stroke-width="1"

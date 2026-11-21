@@ -12,6 +12,10 @@
   const hojaI = document.getElementById("brote-hoja-izq");
   const hojaD = document.getElementById("brote-hoja-der");
   const reducido = matchMedia("(prefers-reduced-motion: reduce)");
+  const seccionProyectos = document.getElementById("proyectos");
+  const esquema = document.querySelector("#proyectos .esquema");
+  const listaEsquema = document.querySelector("#proyectos .esquema__lista");
+  let registrarEntradaEsquema = () => {};
 
   if (anio) {
     anio.textContent = String(new Date().getFullYear());
@@ -94,10 +98,124 @@
   function bloquesTextoLinea() {
     return [
       ...document.querySelectorAll(
-        "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext"
+        "#sobre-mi p, #habilidades p, #proyectos .proyecto__tipo, #proyectos .proyecto__texto, #proyectos .paso__titulo, #proyectos .paso__detalle, .enlace-ext"
       ),
     ];
   }
+
+  function finalizarEntrada(seccion) {
+    if (seccion === seccionProyectos && seccion.dataset.entrada !== "final") {
+      registrarEntradaEsquema();
+    }
+    seccion.dataset.entrada = "final";
+  }
+
+  function prepararEsquema() {
+    if (!seccionProyectos || !esquema || !listaEsquema) return;
+
+    let inicioEntrada = -Infinity;
+    let disparado = false;
+    let iniciado = false;
+    let broteEnAire = false;
+    let esperaAire = null;
+    let esperaInicio = null;
+    let ioEsquema = null;
+
+    registrarEntradaEsquema = () => {
+      if (inicioEntrada === -Infinity) inicioEntrada = performance.now();
+    };
+
+    function irAFinalSinAnimar() {
+      esperaAire?.cancelar();
+      if (esperaInicio) {
+        clearTimeout(esperaInicio);
+        esperaInicio = null;
+      }
+      document.documentElement.classList.remove("js-movimiento");
+      listaEsquema.dataset.esquema = "final";
+      finalizarEntrada(seccionProyectos);
+      disparado = true;
+      iniciado = true;
+      ioEsquema?.disconnect();
+    }
+
+    function arrancarTransiciones() {
+      if (iniciado) return;
+      iniciado = true;
+      listaEsquema.dataset.esquema = "final";
+    }
+
+    function programarInicio(tDisparo) {
+      const lanzar = () => {
+        const retraso = Math.max(
+          0,
+          Math.max(tDisparo, inicioEntrada + 120) - performance.now()
+        );
+        esperaInicio = setTimeout(() => {
+          esperaInicio = null;
+          arrancarTransiciones();
+        }, retraso);
+      };
+      if (!broteEnAire) {
+        lanzar();
+        return;
+      }
+      const tope = setTimeout(() => {
+        esperaAire = null;
+        lanzar();
+      }, 400);
+      esperaAire = {
+        cancelar() {
+          clearTimeout(tope);
+          esperaAire = null;
+        },
+        seguir() {
+          clearTimeout(tope);
+          esperaAire = null;
+          lanzar();
+        },
+      };
+    }
+
+    function disparar() {
+      if (disparado) return;
+      disparado = true;
+      ioEsquema?.disconnect();
+      programarInicio(performance.now());
+    }
+
+    document.addEventListener("brote:salto", () => {
+      broteEnAire = true;
+    });
+    document.addEventListener("brote:aterrizaje", () => {
+      broteEnAire = false;
+      esperaAire?.seguir();
+    });
+
+    if (!reducido.matches) {
+      document.documentElement.classList.add("js-movimiento");
+      ioEsquema = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((entry) => entry.isIntersecting)) disparar();
+        },
+        { threshold: 0.2 }
+      );
+      ioEsquema.observe(esquema);
+    } else {
+      irAFinalSinAnimar();
+    }
+
+    seccionProyectos.addEventListener("focusin", () => {
+      finalizarEntrada(seccionProyectos);
+      if (!iniciado) irAFinalSinAnimar();
+    });
+
+    reducido.addEventListener("change", () => {
+      if (reducido.matches) irAFinalSinAnimar();
+    });
+  }
+
+  prepararEsquema();
 
   function barridoCruzaTexto(oDoc, dDoc, tam) {
     const bloques = bloquesTextoLinea();
@@ -956,7 +1074,7 @@
 
   secciones.forEach((s) => {
     s.addEventListener("focusin", () => {
-      s.dataset.entrada = "final";
+      finalizarEntrada(s);
       bloqueo = s.id;
       setActiva(s.id, "foco");
     });
@@ -1019,14 +1137,14 @@
 
   if (reducido.matches) {
     secciones.forEach((s) => {
-      s.dataset.entrada = "final";
+      finalizarEntrada(s);
     });
   }
   const ioEntrada = new IntersectionObserver(
     (entries) => {
       entries.forEach((e) => {
         if (e.isIntersecting) {
-          e.target.dataset.entrada = "final";
+          finalizarEntrada(e.target);
           ioEntrada.unobserve(e.target);
         }
       });
@@ -1068,7 +1186,7 @@
   const arranqueInicial = () => {
     window.__inicioTituloEntrada = performance.now();
     mascota.style.opacity = "0.01";
-    seccionIni.dataset.entrada = "final";
+    finalizarEntrada(seccionIni);
     void seccionIni.offsetHeight;
     void mascota.offsetHeight;
     aparecer(activa, "inicio");
@@ -1082,7 +1200,7 @@
   reducido.addEventListener("change", () => {
     if (reducido.matches) {
       secciones.forEach((s) => {
-        s.dataset.entrada = "final";
+        finalizarEntrada(s);
       });
     }
     cancelarEspera();
