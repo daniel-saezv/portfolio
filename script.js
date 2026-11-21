@@ -90,6 +90,56 @@
     return t.getBoundingClientRect().left + scrollX;
   }
 
+  function bloquesTextoLinea() {
+    return [
+      ...document.querySelectorAll(
+        "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext"
+      ),
+    ];
+  }
+
+  function barridoCruzaTexto(oDoc, dDoc, tam) {
+    const bloques = bloquesTextoLinea();
+    const oV = { x: oDoc.x - scrollX, y: oDoc.y - scrollY };
+    const dV = { x: dDoc.x - scrollX, y: dDoc.y - scrollY };
+    const muestras = [];
+    let cruza = false;
+    const steps = 48;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const l = oV.x + t * (dV.x - oV.x);
+      const top = oV.y + t * (dV.y - oV.y);
+      const brote = { l, r: l + tam, t: top, b: top + tam };
+      muestras.push({
+        t,
+        l: Math.round(l * 100) / 100,
+        tY: Math.round(top * 100) / 100,
+        r: Math.round((l + tam) * 100) / 100,
+        b: Math.round((top + tam) * 100) / 100,
+      });
+      for (const el of bloques) {
+        const r = el.getBoundingClientRect();
+        const ox = Math.min(brote.r, r.right) - Math.max(brote.l, r.left);
+        const oy = Math.min(brote.b, r.bottom) - Math.max(brote.t, r.top);
+        if (ox > 2 && oy > 2) {
+          cruza = true;
+          break;
+        }
+      }
+      if (cruza) break;
+    }
+    return {
+      cruza,
+      oV,
+      dV,
+      muestras,
+      bloques: bloques.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { l: r.left, r: r.right, t: r.top, b: r.bottom };
+      }),
+    };
+  }
+
   function offsetXAddActual() {
     const r = mascota.getBoundingClientRect();
     const a = posDocDesdeCss();
@@ -205,7 +255,21 @@
     const dPant = { x: d.x - scrollX, y: d.y - scrollY };
     const dist = Math.hypot(d.x - o.x, d.y - o.y);
     let nS = dist <= 320 ? 1 : dist <= 640 ? 2 : 3;
-    if (nS === 1 && dist > 360) nS = 2;
+    let recto = false;
+    let useCarril = false;
+    let barrido = null;
+    if (nS === 1) {
+      barrido = barridoCruzaTexto(o, d, s);
+      if (barrido.cruza) {
+        nS = 2;
+        useCarril = true;
+      } else {
+        recto = true;
+        useCarril = false;
+      }
+    } else {
+      useCarril = true;
+    }
     nS = Math.max(1, nS);
     const hMin = 0.5 * s;
     const hCap = Math.max(hMin, 1.5 * s - (s <= 36 ? 3 : 4));
@@ -223,6 +287,11 @@
 
     const xTexto = xTextoDoc(hasta);
     const xCarril = Math.max(4, xTexto - s - 8);
+    const xCarrilV = Math.max(4, xTexto - scrollX - s - 8);
+    const enCarrilAhora =
+      useCarril &&
+      !recto &&
+      Math.abs(mascota.getBoundingClientRect().left - xCarrilV) <= 1.5;
     const posSaltoFraccion = (hopI, frac) => {
       const p0 = {
         x: o.x + (hopI / nS) * (d.x - o.x),
@@ -315,29 +384,47 @@
         easing: easing || E.cuerda,
       });
     };
-    if (origen === "scroll") {
-      const desde = off(Math.max(A, 0));
-      const k0 = docX(kV[0].transform);
-      kX[0].transform = `translateX(${xAdd0 + xLane - k0}px)`;
-      for (const kf of kV) {
-        if (kf.offset < desde + 1e-6) continue;
-        if (kf.offset >= offVuelta - 1e-6) break;
-        addKx(kf.offset, docX(kf.transform), kf.easing);
-      }
+    if (!useCarril) {
+      kX.push(
+        { offset: offSalida, transform: "translateX(0px)", easing: E.anticipa },
+        { offset: 1, transform: "translateX(0px)" }
+      );
     } else {
-      addKx(offSalida, docX(tr(posSaltoFraccion(0, 0.4))), E.cuerda);
-      for (const kf of kV) {
-        if (kf.offset <= offSalida + 1e-6) continue;
-        if (kf.offset >= offVuelta - 1e-6) break;
-        addKx(kf.offset, docX(kf.transform), kf.easing);
+      const margenDesde =
+        origen === "scroll" || enCarrilAhora
+          ? off(Math.max(A, 0))
+          : offSalida;
+      if (origen === "scroll" || enCarrilAhora) {
+        const k0 = docX(kV[0].transform);
+        kX[0].transform = `translateX(${xAdd0 + xLane - k0}px)`;
+        addKx(
+          margenDesde,
+          docX(
+            kV.find((k) => k.offset >= margenDesde - 1e-6)?.transform ||
+              kV[0].transform
+          ),
+          E.cuerda
+        );
+        for (const kf of kV) {
+          if (kf.offset <= margenDesde + 1e-6) continue;
+          if (kf.offset >= offVuelta - 1e-6) break;
+          addKx(kf.offset, docX(kf.transform), kf.easing);
+        }
+      } else {
+        addKx(offSalida, docX(tr(posSaltoFraccion(0, 0.4))), E.cuerda);
+        for (const kf of kV) {
+          if (kf.offset <= offSalida + 1e-6) continue;
+          if (kf.offset >= offVuelta - 1e-6) break;
+          addKx(kf.offset, docX(kf.transform), kf.easing);
+        }
       }
+      const pVuelta = posSaltoFraccion(nS - 1, 0.6);
+      addKx(offVuelta, docX(tr(pVuelta)), E.anticipa);
+      kX.push(
+        { offset: off(llegada), transform: "translateX(0px)", easing: E.anticipa },
+        { offset: 1, transform: "translateX(0px)" }
+      );
     }
-    const pVuelta = posSaltoFraccion(nS - 1, 0.6);
-    addKx(offVuelta, docX(tr(pVuelta)), E.anticipa);
-    kX.push(
-      { offset: off(llegada), transform: "translateX(0px)", easing: E.anticipa },
-      { offset: 1, transform: "translateX(0px)" }
-    );
     kX.sort((a, b) => a.offset - b.offset);
     kArc.push({ offset: 1, transform: "translateY(0px)" });
     kF.at(-1).easing = E.salida;
@@ -387,7 +474,13 @@
       n: nS,
       h: Math.round(h),
       dist: Math.round(dist),
+      carril: useCarril,
+      recto,
+      barridoCruza: barrido?.cruza ?? false,
+      carrilMs: useCarril ? Math.round(tVueltaCarril - tSalidaCarril) : 0,
     });
+    window.__ultimoBarrido = barrido;
+    window.__barridoCruzaTexto = barridoCruzaTexto;
     const opt = { duration: total, fill: "forwards" };
     anims = [
       mascota.animate(kV, opt),

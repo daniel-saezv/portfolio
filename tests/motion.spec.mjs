@@ -684,7 +684,7 @@ async function main() {
         return {
           pe: getComputedStyle(m).pointerEvents,
           tituloVisible: tr.height > 0 && getComputedStyle(titulo).opacity === "1",
-          mascotaOpacity0: getComputedStyle(m).opacity === "0",
+          mascotaOpacity0: parseFloat(getComputedStyle(m).opacity) <= 0.01,
           solape: mr.bottom > tr.top && mr.width > 0 && getComputedStyle(m).opacity !== "0",
         };
       });

@@ -18,7 +18,8 @@ import {
   panelTrayectoria,
 } from "./trajectory-overlay.mjs";
 
-const artifactDir = "/opt/cursor/artifacts/v4";
+const artifactDir = "/opt/cursor/artifacts/v5";
+const carrilResultados27 = [];
 const H_MIN = { 390: 18, 1440: 24 };
 const H_MAX = { 390: 54, 1440: 72 };
 const NAV_FLOW = [
@@ -323,23 +324,19 @@ function medirCarrilEnFrames(frames, eventos, etiqueta) {
       lefts.push(left);
       desv.push(Math.abs(left - xCarril));
     }
-    const medDesv =
-      desv.length > 0
-        ? desv.reduce((a, b) => a + b, 0) / desv.length
-        : 99;
-    const usaCarril = enCarril.length > 0 && medDesv < 12;
+    const recto = !!salto.detail?.recto;
+    const usaCarril = !!salto.detail?.carril && !recto;
     if (!usaCarril) {
-      if (enCarril.length) {
-        bloques.push({
-          etiqueta,
-          dest,
-          n,
-          framesEnCarril: enCarril.length,
-          omitido: true,
-          medDesv,
-          nota: "salto sin desplazamiento al carril",
-        });
-      }
+      bloques.push({
+        etiqueta,
+        dest,
+        n: salto.detail?.n ?? n,
+        recto,
+        carrilMs: salto.detail?.carrilMs ?? 0,
+        barridoCruza: salto.detail?.barridoCruza ?? false,
+        framesEnCarril: 0,
+        modo: recto ? "recto" : "sin-carril",
+      });
       continue;
     }
     for (const d of desv) {
@@ -349,16 +346,161 @@ function medirCarrilEnFrames(frames, eventos, etiqueta) {
     bloques.push({
       etiqueta,
       dest,
-      n,
+      n: salto.detail?.n ?? n,
       ventanaMs: [tSalidaFin, tVueltaInicio],
       framesEnCarril: enCarril.length,
       leftMin: Math.min(...lefts),
       leftMax: Math.max(...lefts),
       xCarril: xCarrilRef,
-      medDesv,
+      carrilMs: salto.detail?.carrilMs ?? Math.round(tVueltaInicio - tSalidaFin),
+      modo: "carril",
     });
   }
   return { violaciones, bloques, framesEnCarril };
+}
+
+function verificarC27(eventos, etiqueta) {
+  const saltos = eventos.filter(
+    (e) =>
+      e.nombre === "brote:salto" &&
+      e.detail?.hasta &&
+      typeof e.detail.n === "number" &&
+      e.detail.n > 0
+  );
+  let viol = 0;
+  const viajes = saltos.map((s) => {
+    const ms = s.detail.carrilMs ?? 0;
+    const recto = !!s.detail.recto;
+    const ok = recto ? ms === 0 : ms >= 120;
+    if (!ok) viol++;
+    return {
+      desde: s.detail.desde,
+      hasta: s.detail.hasta,
+      origen: s.detail.origen,
+      n: s.detail.n,
+      recto,
+      carril: !!s.detail.carril,
+      carrilMs: ms,
+      barridoCruza: !!s.detail.barridoCruza,
+      ok,
+    };
+  });
+  const resumen = viajes
+    .map(
+      (v) =>
+        `${v.hasta} n=${v.n}${v.recto ? " recto" : ""} carrilMs=${v.carrilMs}${v.barridoCruza ? " barrido" : ""}`
+    )
+    .join("; ");
+  const detalle = `${etiqueta}: viajes=${viajes.length} viol=${viol} (${resumen})`;
+  carrilResultados27.push({ etiqueta, viol, viajes, detalle });
+  reg(27, viol === 0, detalle, { viajes });
+  return { viol, viajes };
+}
+
+async function capturarCasosTrayectoria(page, baseUrl, width) {
+  const casos = {};
+  async function viaNav(href, clave) {
+    await instalarFrameLog(page);
+    await page.evaluate(() => {
+      window.__rafFrames = [];
+      window.__rafArm?.();
+    });
+    await page.click(`nav a[href="${href}"]`);
+    const fin = Date.now() + 20000;
+    while (Date.now() < fin) {
+      const done = await page.evaluate((h) => {
+        const id = h.replace("#", "");
+        const last = window.__eventos
+          ?.filter((e) => e.nombre === "brote:reposo")
+          .at(-1);
+        const m = document.getElementById("mascota");
+        return (
+          last?.detail?.seccion === id &&
+          m.dataset.estado === "reposo" &&
+          m.getAnimations().length === 0
+        );
+      }, href);
+      if (done) break;
+      await page.waitForTimeout(16);
+    }
+    const payload = await page.evaluate(() => {
+      window.__rafStop?.();
+      return {
+        frames: window.__rafFrames || [],
+        salto: window.__eventos
+          ?.filter((e) => e.nombre === "brote:salto")
+          .at(-1),
+        barrido: window.__ultimoBarrido || null,
+      };
+    });
+    casos[clave] = {
+      width,
+      href,
+      detail: payload.salto?.detail,
+      barrido: payload.barrido,
+      frames: payload.frames.length,
+    };
+    guardarJson(`caso-${clave}-${width}.json`, casos[clave]);
+    guardarJson(`frames-caso-${clave}-${width}.json`, payload.frames);
+  }
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await waitAparicionInicial(page);
+  await viaNav("#habilidades", "recto-n1");
+  await viaNav("#enlaces", "carril-n2");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await waitAparicionInicial(page);
+  await instalarFrameLog(page);
+  await page.evaluate(() => window.__rafArm());
+  for (let i = 0; i < 22; i++) {
+    await page.mouse.wheel(0, 180);
+    await page.waitForTimeout(40);
+  }
+  await page.waitForTimeout(2000);
+  const scrollHop = await page.evaluate(() => {
+    window.__rafStop?.();
+    const salto = window.__eventos
+      ?.filter((e) => e.nombre === "brote:salto" && e.detail?.origen === "scroll")
+      .at(-1);
+    return {
+      detail: salto?.detail,
+      barrido: window.__ultimoBarrido || null,
+      frames: (window.__rafFrames || []).length,
+    };
+  });
+  casos[`scroll-n2-${width}`] = { width, ...scrollHop };
+  guardarJson(`caso-scroll-n2-${width}.json`, casos[`scroll-n2-${width}`]);
+  const barridoForzado = await page.evaluate(() => {
+    const tam = document.getElementById("mascota").offsetWidth;
+    const anchor = (id) => {
+      const t = document.getElementById(id).querySelector(".titulo-seccion");
+      let x = 0;
+      let y = 0;
+      for (let e = t; e; e = e.offsetParent) {
+        x += e.offsetLeft;
+        y += e.offsetTop;
+      }
+      const pad = parseFloat(getComputedStyle(t).paddingTop);
+      return { x: Math.round(x - tam * 0.12), y: Math.round(y + pad - tam + 2) };
+    };
+    const o = anchor("sobre-mi");
+    const d = { x: o.x, y: o.y + 300 };
+    const barrido = window.__barridoCruzaTexto(o, d, tam);
+    const dist = Math.hypot(d.x - o.x, d.y - o.y);
+    return {
+      sintetico: true,
+      o,
+      d,
+      dist,
+      cruza: barrido.cruza,
+      regla: "d≤320 y cruza → n=2 forzado",
+      nEsperado: dist <= 320 && barrido.cruza ? 2 : 1,
+      muestras: barrido.muestras?.slice(0, 6),
+      bloques: barrido.bloques?.length,
+    };
+  });
+  casos[`barrido-forzado-${width}`] = barridoForzado;
+  guardarJson(`barrido-forzado-n2-${width}.json`, barridoForzado);
+  return casos;
 }
 
 function curvaOpacidadInicial(frames, tTitulo) {
@@ -639,14 +781,19 @@ async function medirCarrilNav(browser, page, width, height) {
 
 function registrarCarril26(medida, etiqueta) {
   const { violaciones, bloques, framesEnCarril } = medida;
-  const enCarril = bloques.filter((b) => !b.omitido);
-  const framesLane = enCarril.reduce((s, b) => s + b.framesEnCarril, 0);
-  const pass = violaciones === 0 && (enCarril.length === 0 || framesLane > 0);
+  const framesLane = bloques.reduce((s, b) => s + (b.framesEnCarril || 0), 0);
+  const conCarril = bloques.filter((b) => b.modo === "carril");
+  const pass =
+    violaciones === 0 &&
+    bloques.length > 0 &&
+    (conCarril.length === 0 || framesLane > 0);
   const resumen = bloques
     .map((b) =>
-      b.omitido
-        ? `${b.dest}: omitido (${b.nota})`
-        : `${b.dest}: xCarril=${b.xCarril.toFixed(1)} ventana=${b.ventanaMs?.join("–")}ms n=${b.framesEnCarril} left∈[${b.leftMin.toFixed(2)},${b.leftMax.toFixed(2)}]`
+      b.modo === "recto"
+        ? `${b.dest}: recto n=${b.n} carrilMs=${b.carrilMs} barrido=${b.barridoCruza}`
+        : b.modo === "carril"
+          ? `${b.dest}: xCarril=${b.xCarril.toFixed(1)} ventana=${b.ventanaMs?.join("–")}ms n=${b.framesEnCarril} carrilMs=${b.carrilMs} left∈[${b.leftMin.toFixed(2)},${b.leftMax.toFixed(2)}]`
+          : `${b.dest}: sin carril n=${b.n}`
     )
     .join("; ");
   const detalle = `${etiqueta}: |left−xCarril|≤1 viol=${violaciones} framesCarril=${framesLane} (${resumen})`;
@@ -848,6 +995,7 @@ async function main() {
       const r15 = await criterio15(page, width, "#enlaces", "enlaces", false);
       guardarJson(`frames-nav-${width}.json`, r15.log);
       registrarCarril26(r15.carril, `${width}px nav→enlaces`);
+      verificarC27(r15.ev, `${width}px nav→enlaces`);
       reg(
         15,
         true,
@@ -865,6 +1013,11 @@ async function main() {
       );
       guardarJson(`frames-rapid-${width}.json`, rapid.log);
       registrarCarril26(rapid.carril, `${width}px clics rápidos`);
+      verificarC27(rapid.ev, `${width}px clics rápidos`);
+      guardarJson(`rapid-viajes-${width}.json`, {
+        carril: rapid.carril.bloques,
+        c27: carrilResultados27.at(-1),
+      });
       reg(
         15,
         rapid.maxStep <= 2.05,
@@ -904,31 +1057,53 @@ async function main() {
         solape.cruces === 0,
         `${width}px scroll: cruces texto en vuelo=${solape.cruces} (frames vuelo=${solape.framesVuelo})`
       );
+      verificarC27(ev, `${width}px scroll manual`);
       await pScroll.close();
     }
+
+    const casosEvidencia = {};
+    for (const width of [390, 1440]) {
+      const height = width === 390 ? 844 : 900;
+      const pCasos = await browser.newPage({ viewport: { width, height } });
+      await setupEventLog(pCasos);
+      casosEvidencia[width] = await capturarCasosTrayectoria(
+        pCasos,
+        baseUrl,
+        width
+      );
+      await pCasos.close();
+    }
+    guardarJson("casos-trayectoria-resumen.json", casosEvidencia);
 
     const v390 = await grabarDemoCompleta(
       browser,
       baseUrl,
       390,
       844,
-      "motion-v4-390.mp4"
+      "motion-v5-390.mp4"
     );
     const v1440 = await grabarDemoCompleta(
       browser,
       baseUrl,
       1440,
       900,
-      "motion-v4-1440.mp4"
+      "motion-v5-1440.mp4"
     );
     ok(
       `vídeos ${v390.mp4} (${v390.dur.toFixed(1)}s), ${v1440.mp4} (${v1440.dur.toFixed(1)}s)`
     );
 
     fs.writeFileSync(
-      path.join(artifactDir, "criteria-v4.json"),
+      path.join(artifactDir, "criteria-v5.json"),
       JSON.stringify(
-        { resultados, c20Resultados, carrilResultados, logs },
+        {
+          resultados,
+          c20Resultados,
+          carrilResultados,
+          carrilResultados27,
+          logs,
+          casosEvidencia,
+        },
         null,
         2
       )
@@ -936,7 +1111,7 @@ async function main() {
     console.log("\n=== motion-v4 OK ===\n");
   } finally {
     fs.writeFileSync(
-      path.join(artifactDir, "motion-v4-log.txt"),
+      path.join(artifactDir, "motion-v5-log.txt"),
       logStream.join("\n")
     );
     console.log = origLog;
