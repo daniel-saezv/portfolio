@@ -23,7 +23,7 @@ No hay paso de build del sitio.
 
 ## CI/CD
 
-- Workflow `Desplegar en GitHub Pages` en cada push a `main`.
+- Workflow `Desplegar en GitHub Pages` en cada push a `main` o manual (`workflow_dispatch`): job `build` (artefacto `_site`) y job `deploy` (entorno `github-pages`).
 - Requiere GitHub Pages habilitado con origen **GitHub Actions**.
 - El proyecto se despliega en GitHub Pages (URL del entorno `github-pages` tras el primer despliegue exitoso).
 
