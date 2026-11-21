@@ -1,67 +1,150 @@
 (function () {
-  const sectionIds = ["sobre-mi", "habilidades", "enlaces"];
-  const sections = sectionIds
-    .map((id) => document.getElementById(id))
-    .filter(Boolean);
+  const secciones = [...document.querySelectorAll("[data-seccion]")];
+  const enlacesNav = [...document.querySelectorAll(".nav__enlace")];
+  const mascota = document.getElementById("mascota");
+  const anio = document.getElementById("anio");
 
-  if (!sections.length) {
+  if (!secciones.length || !mascota) {
     return;
   }
 
-  let activeId = "";
-
-  function setActiveSection(id) {
-    if (!id || id === activeId) {
-      return;
-    }
-    activeId = id;
-    document.body.dataset.seccionActiva = id;
+  if (anio) {
+    anio.textContent = String(new Date().getFullYear());
   }
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      const visible = entries
-        .filter((entry) => entry.isIntersecting)
-        .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+  let activa = null;
+  let bloqueo = null;
 
-      if (visible.length > 0) {
-        setActiveSection(visible[0].target.id);
-        return;
+  function puntoDeAnclaje(id) {
+    const titulo = document.getElementById(id).querySelector(".titulo-seccion");
+    const rect = titulo.getBoundingClientRect();
+    const tam = mascota.offsetWidth;
+    const pad = parseFloat(getComputedStyle(titulo).paddingTop);
+    return {
+      x: Math.round(rect.left + scrollX - tam * 0.12),
+      y: Math.round(rect.top + scrollY + pad - tam + 2),
+    };
+  }
+
+  function colocar(id) {
+    const p = puntoDeAnclaje(id);
+    mascota.style.setProperty("--brote-x", p.x + "px");
+    mascota.style.setProperty("--brote-y", p.y + "px");
+  }
+
+  function setActiva(id) {
+    if (!id || id === activa) {
+      return;
+    }
+    activa = id;
+    document.body.dataset.seccionActiva = id;
+
+    enlacesNav.forEach((a) => a.removeAttribute("aria-current"));
+    enlacesNav
+      .filter((a) => a.dataset.destino === id)
+      .forEach((a) => a.setAttribute("aria-current", "true"));
+
+    mascota.dataset.estado = "reposo";
+    colocar(id);
+  }
+
+  function masVisible() {
+    if (bloqueo) {
+      return;
+    }
+    const vh = innerHeight;
+    const navH = document.querySelector(".nav").offsetHeight;
+
+    if (scrollY + vh >= document.documentElement.scrollHeight - 4) {
+      setActiva(secciones.at(-1).id);
+      return;
+    }
+
+    let mejor = null;
+    let max = -1;
+    for (const s of secciones) {
+      const r = s.getBoundingClientRect();
+      const visible = Math.min(r.bottom, vh) - Math.max(r.top, navH);
+      if (visible > max) {
+        max = visible;
+        mejor = s.id;
       }
+    }
+    if (mejor) {
+      setActiva(mejor);
+    }
+  }
 
-      const closest = entries.reduce((best, entry) => {
-        if (!best) {
-          return entry;
-        }
-        return Math.abs(entry.boundingClientRect.top) <
-          Math.abs(best.boundingClientRect.top)
-          ? entry
-          : best;
-      }, null);
+  const umbrales = Array.from({ length: 21 }, (_, i) => i / 20);
+  const ioActiva = new IntersectionObserver(masVisible, { threshold: umbrales });
+  secciones.forEach((s) => ioActiva.observe(s));
 
-      if (closest) {
-        setActiveSection(closest.target.id);
+  addEventListener(
+    "scroll",
+    () => {
+      if (scrollY + innerHeight >= document.documentElement.scrollHeight - 4) {
+        masVisible();
       }
     },
-    {
-      root: null,
-      rootMargin: "-20% 0px -55% 0px",
-      threshold: [0, 0.1, 0.25, 0.5, 0.75, 1],
-    }
+    { passive: true }
   );
 
-  sections.forEach((section) => observer.observe(section));
-
-  document.querySelectorAll('nav a[href^="#"]').forEach((link) => {
-    link.addEventListener("click", () => {
-      const hash = link.getAttribute("href");
-      if (!hash || hash.length < 2) {
-        return;
-      }
-      const id = hash.slice(1);
-      window.setTimeout(() => setActiveSection(id), 150);
+  enlacesNav.forEach((a) => {
+    a.addEventListener("click", () => {
+      bloqueo = a.dataset.destino;
+      setActiva(bloqueo);
     });
   });
 
-  setActiveSection(sections[0].id);
+  const liberar = () => {
+    bloqueo = null;
+  };
+  ["wheel", "touchstart"].forEach((ev) =>
+    addEventListener(ev, liberar, { passive: true })
+  );
+  addEventListener("keydown", (e) => {
+    if (
+      ["ArrowDown", "ArrowUp", "PageDown", "PageUp", "Home", "End", " "].includes(
+        e.key
+      )
+    ) {
+      liberar();
+    }
+  });
+
+  secciones.forEach((s) => {
+    s.addEventListener("focusin", () => {
+      s.dataset.entrada = "final";
+      bloqueo = s.id;
+      setActiva(s.id);
+    });
+  });
+
+  const ioEntrada = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((e) => {
+        if (e.isIntersecting) {
+          e.target.dataset.entrada = "final";
+          ioEntrada.unobserve(e.target);
+        }
+      });
+    },
+    { threshold: 0.12 }
+  );
+  secciones.forEach((s) => ioEntrada.observe(s));
+
+  const recolocar = () => {
+    if (activa) {
+      colocar(activa);
+    }
+  };
+  addEventListener("resize", recolocar);
+  if (document.fonts) {
+    document.fonts.ready.then(recolocar);
+  }
+  new ResizeObserver(recolocar).observe(document.body);
+
+  const hash = location.hash.slice(1);
+  const inicial = secciones.some((s) => s.id === hash) ? hash : secciones[0].id;
+  setActiva(inicial);
 })();
