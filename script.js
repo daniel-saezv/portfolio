@@ -399,6 +399,60 @@
       const m = transform.match(/translate\((-?[\d.]+)px/);
       return m ? Math.round(parseFloat(m[1]) * 1000) / 1000 : 0;
     };
+    const progresoCurva = (easing, t) => {
+      if (t <= 0) return 0;
+      if (t >= 1) return 1;
+      const m = String(easing || "linear").match(
+        /cubic-bezier\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/
+      );
+      if (!m) return t;
+      const x1 = +m[1];
+      const y1 = +m[2];
+      const x2 = +m[3];
+      const y2 = +m[4];
+      const cx = 3 * x1;
+      const bx = 3 * (x2 - x1) - cx;
+      const ax = 1 - cx - bx;
+      const cy = 3 * y1;
+      const by = 3 * (y2 - y1) - cy;
+      const ay = 1 - cy - by;
+      const sampleX = (u) => ((ax * u + bx) * u + cx) * u;
+      const sampleY = (u) => ((ay * u + by) * u + cy) * u;
+      const sampleDX = (u) => (3 * ax * u + 2 * bx) * u + cx;
+      let u = t;
+      for (let i = 0; i < 8; i++) {
+        const dx = sampleDX(u) || 1e-6;
+        u -= (sampleX(u) - t) / dx;
+        if (u < 0) u = 0;
+        if (u > 1) u = 1;
+      }
+      return sampleY(u);
+    };
+    const xCaminoEn = (kfs, offset) => {
+      let a = kfs[0];
+      let b = kfs[kfs.length - 1];
+      for (let i = 0; i < kfs.length - 1; i++) {
+        if (kfs[i + 1].offset - kfs[i].offset <= 1e-9) continue;
+        if (offset <= kfs[i + 1].offset + 1e-9) {
+          a = kfs[i];
+          b = kfs[i + 1];
+          break;
+        }
+      }
+      const span = b.offset - a.offset;
+      const u = span > 1e-9 ? (offset - a.offset) / span : 0;
+      const xa = docX(a.transform);
+      const xb = docX(b.transform);
+      return {
+        x: xa + (xb - xa) * progresoCurva(a.easing, u),
+        u,
+        parcial: u > 1e-6 && u < 1 - 1e-6,
+        easing: a.easing,
+        offsetA: a.offset,
+        xa,
+        xb,
+      };
+    };
     const xLane = xCarril;
     const kX = [
       { offset: 0, transform: `translateX(${xAdd0}px)`, easing: E.anticipa },
@@ -458,8 +512,27 @@
           addKx(kf.offset, docX(kf.transform), kf.easing);
         }
       }
-      const pVuelta = posSaltoFraccion(nS - 1, 0.6);
-      addKx(offVuelta, docX(tr(pVuelta)), E.anticipa);
+      const camVuelta = xCaminoEn(kV, offVuelta);
+      const prevVuelta = kX.at(-1);
+      if (
+        camVuelta.parcial &&
+        prevVuelta &&
+        Math.abs(prevVuelta.offset - camVuelta.offsetA) < 1e-6 &&
+        Math.abs(camVuelta.xb - camVuelta.xa) > 1e-4
+      ) {
+        const pasos = 8;
+        prevVuelta.easing = "linear";
+        for (let i = 1; i < pasos; i++) {
+          const s = i / pasos;
+          const p = progresoCurva(camVuelta.easing, camVuelta.u * s);
+          addKx(
+            camVuelta.offsetA + (offVuelta - camVuelta.offsetA) * s,
+            camVuelta.xa + (camVuelta.xb - camVuelta.xa) * p,
+            "linear"
+          );
+        }
+      }
+      addKx(offVuelta, camVuelta.x, E.anticipa);
       kX.push(
         { offset: off(llegada), transform: "translateX(0px)", easing: E.anticipa },
         { offset: 1, transform: "translateX(0px)" }
