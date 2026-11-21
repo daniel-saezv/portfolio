@@ -58,6 +58,7 @@
   let bloqueo = null;
   let anims = [];
   let viajando = false;
+  let viajeUsaCarril = false;
   let viajeDestino = null;
   let tAterrizaje = 0;
   let aterrizado = true;
@@ -83,7 +84,71 @@
     };
   }
 
-  const tr = (p) => `translate(${p.x}px, ${p.y}px)`;
+  function xTextoDoc(seccionId) {
+    const t = document
+      .getElementById(seccionId)
+      .querySelector(".titulo-seccion");
+    return t.getBoundingClientRect().left + scrollX;
+  }
+
+  function bloquesTextoLinea() {
+    return [
+      ...document.querySelectorAll(
+        "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext"
+      ),
+    ];
+  }
+
+  function barridoCruzaTexto(oDoc, dDoc, tam) {
+    const bloques = bloquesTextoLinea();
+    const oV = { x: oDoc.x - scrollX, y: oDoc.y - scrollY };
+    const dV = { x: dDoc.x - scrollX, y: dDoc.y - scrollY };
+    const muestras = [];
+    let cruza = false;
+    const steps = 48;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const l = oV.x + t * (dV.x - oV.x);
+      const top = oV.y + t * (dV.y - oV.y);
+      const brote = { l, r: l + tam, t: top, b: top + tam };
+      muestras.push({
+        t,
+        l: Math.round(l * 100) / 100,
+        tY: Math.round(top * 100) / 100,
+        r: Math.round((l + tam) * 100) / 100,
+        b: Math.round((top + tam) * 100) / 100,
+      });
+      for (const el of bloques) {
+        const r = el.getBoundingClientRect();
+        const ox = Math.min(brote.r, r.right) - Math.max(brote.l, r.left);
+        const oy = Math.min(brote.b, r.bottom) - Math.max(brote.t, r.top);
+        if (ox > 2 && oy > 2) {
+          cruza = true;
+          break;
+        }
+      }
+      if (cruza) break;
+    }
+    return {
+      cruza,
+      oV,
+      dV,
+      muestras,
+      bloques: bloques.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { l: r.left, r: r.right, t: r.top, b: r.bottom };
+      }),
+    };
+  }
+
+  function offsetXAddActual() {
+    const r = mascota.getBoundingClientRect();
+    const a = posDocDesdeCss();
+    return Math.round(r.left + scrollX - a.x);
+  }
+
+  const tr = (p) =>
+    `translate(${Math.round(p.x * 1000) / 1000}px, ${Math.round(p.y * 1000) / 1000}px)`;
 
   function fijar(p) {
     mascota.style.setProperty("--brote-x", Math.round(p.x) + "px");
@@ -129,9 +194,28 @@
     const a0I = ang(hojaI);
     const a0D = ang(hojaD);
     const opac = parseFloat(getComputedStyle(mascota).opacity) || 1;
-    const retarget = viajando;
+    const retarget =
+      viajando ||
+      mascota.dataset.estado === "salto" ||
+      mascota.getAnimations().length > 0;
+    const refCarril =
+      viajando && viajeDestino ? viajeDestino : hasta;
+    const xLaneRef = Math.max(
+      4,
+      xTextoDoc(refCarril) - scrollX - mascota.offsetWidth - 8
+    );
+    const xAddInicio = viajando ? offsetXAddActual() : 0;
+    const laneLeftNow =
+      Math.abs(mascota.getBoundingClientRect().left - xLaneRef) <= 2.5;
+    const estabaEnCarril =
+      retarget &&
+      (laneLeftNow ||
+        Math.abs(mascota.getBoundingClientRect().left - xLaneRef) <= 1.5);
     cancelar();
-    const o0 = { x: mV.e, y: mV.f };
+    const o0 = {
+      x: Math.round(mV.e * 1000) / 1000,
+      y: Math.round(mV.f * 1000) / 1000,
+    };
     fijar(o0);
 
     if (reducido.matches) {
@@ -191,7 +275,26 @@
     const dPant = { x: d.x - scrollX, y: d.y - scrollY };
     const dist = Math.hypot(d.x - o.x, d.y - o.y);
     let nS = dist <= 320 ? 1 : dist <= 640 ? 2 : 3;
-    if (nS === 1 && dist > 360) nS = 2;
+    let recto = false;
+    let useCarril = false;
+    let barrido = null;
+    if (nS === 1) {
+      barrido = barridoCruzaTexto(o, d, s);
+      if (barrido.cruza) {
+        nS = 2;
+        useCarril = true;
+      } else {
+        recto = true;
+        useCarril = false;
+      }
+    } else {
+      useCarril = true;
+    }
+    if (retarget && estabaEnCarril) {
+      recto = false;
+      useCarril = true;
+      if (nS === 1) nS = 2;
+    }
     nS = Math.max(1, nS);
     const hMin = 0.5 * s;
     const hCap = Math.max(hMin, 1.5 * s - (s <= 36 ? 3 : 4));
@@ -199,16 +302,48 @@
       hMin,
       Math.min(0.5 * s + 0.25 * (dist / nS), hCap)
     );
-    const A = retarget ? 0 : T.anticipacion;
+    const xAdd0 = retarget ? xAddInicio : saltoSinA ? offsetXAddActual() : 0;
+    const A = retarget || saltoSinA ? 0 : T.anticipacion;
+    saltoSinA = false;
     const llegada = A + nS * T.salto + (nS - 1) * T.contacto;
     const total = llegada + T.hojas;
     const off = (t) => t / total;
     const sc = ([x, y]) => `scale(${x}, ${y})`;
 
+    const xTexto = xTextoDoc(hasta);
+    const xCarril = Math.max(4, xTexto - s - 8);
+    const xCarrilV = Math.max(4, xTexto - scrollX - s - 8);
+    const enCarrilAhora =
+      (retarget && estabaEnCarril) ||
+      (useCarril &&
+        !recto &&
+        Math.abs(mascota.getBoundingClientRect().left - xCarrilV) <= 1.5);
+    const posSaltoFraccion = (hopI, frac) => {
+      const p0 = {
+        x: o.x + (hopI / nS) * (d.x - o.x),
+        y: o.y + (hopI / nS) * (d.y - o.y),
+      };
+      const p1 = {
+        x: o.x + ((hopI + 1) / nS) * (d.x - o.x),
+        y: o.y + ((hopI + 1) / nS) * (d.y - o.y),
+      };
+      return {
+        x: p0.x + frac * (p1.x - p0.x),
+        y: p0.y + frac * (p1.y - p0.y),
+      };
+    };
+    const tSalidaCarril = A + 0.4 * T.salto;
+    const tVueltaCarril =
+      A + (nS - 1) * (T.salto + T.contacto) + 0.6 * T.salto;
+    const pSalidaCarril = posSaltoFraccion(0, 0.4);
+    const pVueltaCarril = posSaltoFraccion(nS - 1, 0.6);
+
     const kV = [{ offset: 0, transform: tr(o), easing: E.cuerda }];
+    const kArc = [{ offset: 0, transform: "translateY(0px)", easing: E.cuerda }];
     const kF = [{ offset: 0, transform: sc([mF.a, mF.d]), easing: E.anticipa }];
     if (A) {
       kV.push({ offset: off(A), transform: tr(o) });
+      kArc.push({ offset: off(A), transform: "translateY(0px)" });
       kF.push({ offset: off(A), transform: sc(F.anticipa) });
     }
     for (let i = 0; i < nS; i++) {
@@ -221,25 +356,25 @@
         x: o.x + (d.x - o.x) * fracEnd,
         y: o.y + (d.y - o.y) * fracEnd,
       };
-      const pApex = {
+      const pMid = {
         x: o.x + (d.x - o.x) * fracMid,
-        y: o.y + (d.y - o.y) * fracMid - h,
+        y: o.y + (d.y - o.y) * fracMid,
       };
       if (i > 0) {
         kV.push({ offset: off(t0), transform: kV.at(-1).transform });
+        kArc.push({ offset: off(t0), transform: "translateY(0px)" });
         kF.push({ offset: off(t0), transform: sc(F.contacto) });
       }
-      kV.at(-1).easing = "linear";
-      kV.push({
+      kV.at(-1).easing = E.cuerda;
+      kV.push({ offset: off(tMid), transform: tr(pMid), easing: E.cuerda });
+      kV.push({ offset: off(t1), transform: tr(p1), easing: E.cuerda });
+      kArc.at(-1).easing = E.subida;
+      kArc.push({
         offset: off(tMid),
-        transform: tr(pApex),
-        easing: "linear",
+        transform: `translateY(${-h}px)`,
+        easing: E.bajada,
       });
-      kV.push({
-        offset: off(t1),
-        transform: tr(p1),
-        easing: "linear",
-      });
+      kArc.push({ offset: off(t1), transform: "translateY(0px)" });
       kF.at(-1).easing = E.estira;
       kF.push({
         offset: off(t0 + 0.2 * T.salto),
@@ -256,6 +391,155 @@
         transform: sc(i === nS - 1 ? F.aterrizaje : F.contacto),
       });
     }
+    kV.push({ offset: 1, transform: tr(d) });
+    kV.sort((a, b) => a.offset - b.offset);
+    const offSalida = off(tSalidaCarril);
+    const offVuelta = off(tVueltaCarril);
+    const docX = (transform) => {
+      const m = transform.match(/translate\((-?[\d.]+)px/);
+      return m ? Math.round(parseFloat(m[1]) * 1000) / 1000 : 0;
+    };
+    const progresoCurva = (easing, t) => {
+      if (t <= 0) return 0;
+      if (t >= 1) return 1;
+      const m = String(easing || "linear").match(
+        /cubic-bezier\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/
+      );
+      if (!m) return t;
+      const x1 = +m[1];
+      const y1 = +m[2];
+      const x2 = +m[3];
+      const y2 = +m[4];
+      const cx = 3 * x1;
+      const bx = 3 * (x2 - x1) - cx;
+      const ax = 1 - cx - bx;
+      const cy = 3 * y1;
+      const by = 3 * (y2 - y1) - cy;
+      const ay = 1 - cy - by;
+      const sampleX = (u) => ((ax * u + bx) * u + cx) * u;
+      const sampleY = (u) => ((ay * u + by) * u + cy) * u;
+      const sampleDX = (u) => (3 * ax * u + 2 * bx) * u + cx;
+      let u = t;
+      for (let i = 0; i < 8; i++) {
+        const dx = sampleDX(u) || 1e-6;
+        u -= (sampleX(u) - t) / dx;
+        if (u < 0) u = 0;
+        if (u > 1) u = 1;
+      }
+      return sampleY(u);
+    };
+    const xCaminoEn = (kfs, offset) => {
+      let a = kfs[0];
+      let b = kfs[kfs.length - 1];
+      for (let i = 0; i < kfs.length - 1; i++) {
+        if (kfs[i + 1].offset - kfs[i].offset <= 1e-9) continue;
+        if (offset <= kfs[i + 1].offset + 1e-9) {
+          a = kfs[i];
+          b = kfs[i + 1];
+          break;
+        }
+      }
+      const span = b.offset - a.offset;
+      const u = span > 1e-9 ? (offset - a.offset) / span : 0;
+      const xa = docX(a.transform);
+      const xb = docX(b.transform);
+      return {
+        x: xa + (xb - xa) * progresoCurva(a.easing, u),
+        u,
+        parcial: u > 1e-6 && u < 1 - 1e-6,
+        easing: a.easing,
+        offsetA: a.offset,
+        xa,
+        xb,
+      };
+    };
+    const xLane = xCarril;
+    const kX = [
+      { offset: 0, transform: `translateX(${xAdd0}px)`, easing: E.anticipa },
+    ];
+    const snapLaneAddV = () => {
+      const left = mascota.getBoundingClientRect().left;
+      return Math.round((xCarrilV - left) * 1000) / 1000;
+    };
+    const addKx = (offset, pathX, easing) => {
+      const tx = Math.round((xLane - pathX) * 1000) / 1000;
+      kX.push({
+        offset,
+        transform: `translateX(${tx}px)`,
+        easing: easing || E.cuerda,
+      });
+    };
+    if (!useCarril) {
+      kX.push(
+        { offset: offSalida, transform: "translateX(0px)", easing: E.anticipa },
+        { offset: 1, transform: "translateX(0px)" }
+      );
+    } else {
+      const margenDesde =
+        origen === "scroll" || enCarrilAhora
+          ? off(Math.max(A, 0))
+          : offSalida;
+      if (origen === "scroll" || enCarrilAhora) {
+        if (enCarrilAhora) {
+          kX[0].transform = `translateX(${snapLaneAddV()}px)`;
+          for (const kf of kV) {
+            if (kf.offset <= margenDesde + 1e-6) continue;
+            if (kf.offset >= offVuelta - 1e-6) break;
+            addKx(kf.offset, docX(kf.transform), kf.easing);
+          }
+        } else {
+          const k0 = docX(kV[0].transform);
+          kX[0].transform = `translateX(${xAdd0 + xLane - k0}px)`;
+          addKx(
+            margenDesde,
+            docX(
+              kV.find((k) => k.offset >= margenDesde - 1e-6)?.transform ||
+                kV[0].transform
+            ),
+            E.cuerda
+          );
+          for (const kf of kV) {
+            if (kf.offset <= margenDesde + 1e-6) continue;
+            if (kf.offset >= offVuelta - 1e-6) break;
+            addKx(kf.offset, docX(kf.transform), kf.easing);
+          }
+        }
+      } else {
+        addKx(offSalida, docX(tr(posSaltoFraccion(0, 0.4))), E.cuerda);
+        for (const kf of kV) {
+          if (kf.offset <= offSalida + 1e-6) continue;
+          if (kf.offset >= offVuelta - 1e-6) break;
+          addKx(kf.offset, docX(kf.transform), kf.easing);
+        }
+      }
+      const camVuelta = xCaminoEn(kV, offVuelta);
+      const prevVuelta = kX.at(-1);
+      if (
+        camVuelta.parcial &&
+        prevVuelta &&
+        Math.abs(prevVuelta.offset - camVuelta.offsetA) < 1e-6 &&
+        Math.abs(camVuelta.xb - camVuelta.xa) > 1e-4
+      ) {
+        const pasos = 8;
+        prevVuelta.easing = "linear";
+        for (let i = 1; i < pasos; i++) {
+          const s = i / pasos;
+          const p = progresoCurva(camVuelta.easing, camVuelta.u * s);
+          addKx(
+            camVuelta.offsetA + (offVuelta - camVuelta.offsetA) * s,
+            camVuelta.xa + (camVuelta.xb - camVuelta.xa) * p,
+            "linear"
+          );
+        }
+      }
+      addKx(offVuelta, camVuelta.x, E.anticipa);
+      kX.push(
+        { offset: off(llegada), transform: "translateX(0px)", easing: E.anticipa },
+        { offset: 1, transform: "translateX(0px)" }
+      );
+    }
+    kX.sort((a, b) => a.offset - b.offset);
+    kArc.push({ offset: 1, transform: "translateY(0px)" });
     kF.at(-1).easing = E.salida;
     kF.push({
       offset: off(llegada + T.aterrizaje / 2),
@@ -267,7 +551,6 @@
       transform: "scale(1, 1)",
     });
     kF.push({ offset: 1, transform: "scale(1, 1)" });
-    kV.push({ offset: 1, transform: tr(d) });
     const kH = (a, signo) => [
       { offset: 0, transform: `rotate(${a}deg)`, easing: E.salida },
       {
@@ -292,7 +575,9 @@
     mascota.classList.add("en-viaje");
     mascota.style.willChange = "transform";
     mascota.style.opacity = "";
+    viajeUsaCarril = useCarril;
     viajando = true;
+    scrollViajeY = scrollY;
     aterrizado = false;
     const desdeEvento = retarget && viajeDestino ? viajeDestino : desde;
     viajeDestino = hasta;
@@ -303,10 +588,23 @@
       n: nS,
       h: Math.round(h),
       dist: Math.round(dist),
+      carril: useCarril,
+      recto,
+      barridoCruza: barrido?.cruza ?? false,
+      carrilMs: useCarril ? Math.round(tVueltaCarril - tSalidaCarril) : 0,
+      tSalidaFinMs: Math.round(tSalidaCarril),
+      estabaEnCarril: !!estabaEnCarril,
+      laneLeftNow,
+      retarget,
+      viajeUsaCarrilPrev: !!viajeUsaCarril,
     });
+    window.__ultimoBarrido = barrido;
+    window.__barridoCruzaTexto = barridoCruzaTexto;
     const opt = { duration: total, fill: "forwards" };
     anims = [
       mascota.animate(kV, opt),
+      mascota.animate(kArc, { ...opt, composite: "add" }),
+      mascota.animate(kX, { ...opt, composite: "add" }),
       svg.animate(kF, opt),
       hojaI.animate(kH(a0I, 1), opt),
       hojaD.animate(kH(a0D, -1), opt),
@@ -359,26 +657,11 @@
     return `scale(${x}, ${y})`;
   }
 
-  function cuandoEntradaLista(id, hecho) {
-    const s = document.getElementById(id);
-    if (!s || s.dataset.entrada === "final") {
-      hecho();
-      return;
-    }
-    const obs = new MutationObserver(() => {
-      if (s.dataset.entrada === "final") {
-        obs.disconnect();
-        hecho();
-      }
-    });
-    obs.observe(s, { attributes: true, attributeFilter: ["data-entrada"] });
-    setTimeout(() => {
-      obs.disconnect();
-      hecho();
-    }, 520);
-  }
-
   function aparecer(id, origen) {
+    window.__inicioAparicion =
+      origen === "inicio" && window.__inicioTituloEntrada
+        ? window.__inicioTituloEntrada
+        : performance.now();
     cancelar();
     fijar(puntoDeAnclaje(id));
     mascota.dataset.estado = "reposo";
@@ -387,14 +670,15 @@
       emitir("brote:reposo", { seccion: id, origen });
     };
     if (reducido.matches) {
+      mascota.style.opacity = "0.01";
       anims = [
         mascota.animate(
-          [{ opacity: 0 }, { opacity: 1 }],
+          [{ opacity: 0.01 }, { opacity: 1 }],
           {
             duration: T.rmEntrada,
-            delay: T.aparicionRetraso,
             easing: E.desacel,
             fill: "both",
+            delay: 0,
           }
         ),
       ];
@@ -403,17 +687,25 @@
     }
     viajando = true;
     mascota.classList.add("en-viaje");
-    const total = T.caida + T.hojas;
+    const total =
+      origen === "inicio" ? T.caida + 200 : T.caida + T.hojas;
     const off = (t) => t / total;
     const opt = {
       duration: total,
-      delay: T.aparicionRetraso,
       fill: "both",
     };
+    const syncAncla = () => {
+      if (!viajando) return;
+      fijar(puntoDeAnclaje(id));
+    };
+    if (document.fonts?.addEventListener) {
+      document.fonts.addEventListener("loadingdone", syncAncla);
+    }
+    addEventListener("resize", syncAncla);
     anims = [
       mascota.animate(
         [
-          { opacity: 0, easing: E.desacel },
+          { opacity: 0.01, easing: E.desacel },
           { offset: off(T.aparicionOpacidad), opacity: 1 },
           { opacity: 1 },
         ],
@@ -449,7 +741,13 @@
     let listas = 0;
     const todasListas = () => {
       listas += 1;
-      if (listas >= anims.length) fin();
+      if (listas >= anims.length) {
+        if (document.fonts?.removeEventListener) {
+          document.fonts.removeEventListener("loadingdone", syncAncla);
+        }
+        removeEventListener("resize", syncAncla);
+        fin();
+      }
     };
     anims.forEach((a) => {
       a.onfinish = todasListas;
@@ -462,6 +760,8 @@
   let rafScroll = 0;
   let ultimoScrollY = 0;
   let acompanandoScroll = false;
+  let saltoSinA = false;
+  let scrollViajeY = 0;
 
   function navAlto() {
     return document.querySelector(".nav").offsetHeight;
@@ -550,6 +850,24 @@
       return;
     }
     if (viajando) {
+      if (origen === "ancla" || origen === "foco") {
+        sincDocConPantalla();
+        cancelar();
+        viajeDestino = null;
+        saltoSinA = true;
+        pendiente = {
+          desde: pendiente ? pendiente.desde : desde,
+          hasta: id,
+          origen,
+          navScroll: true,
+        };
+        clearTimeout(tQuieto);
+        clearTimeout(tTope);
+        iniciarAcompanarScroll();
+        tQuieto = setTimeout(lanzarPendiente, T.quietud);
+        tTope = setTimeout(lanzarPendiente, T.topeEspera);
+        return;
+      }
       cancelarEspera();
       viajar(viajeDestino || desde, id, origen);
       return;
@@ -586,6 +904,14 @@
   addEventListener(
     "scroll",
     () => {
+      if (viajando) {
+        const delta = scrollY - scrollViajeY;
+        if (delta !== 0) {
+          const p = posDocDesdeCss();
+          fijar({ x: p.x, y: p.y + delta });
+          scrollViajeY = scrollY;
+        }
+      }
       if (pendiente?.navScroll && !viajando) {
         const delta = scrollY - ultimoScrollY;
         if (delta !== 0) {
@@ -738,9 +1064,20 @@
     .filter((a) => a.dataset.destino === activa)
     .forEach((a) => a.setAttribute("aria-current", "true"));
   mascota.style.opacity = "0";
-  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() =>
-    cuandoEntradaLista(activa, () => aparecer(activa, "inicio"))
-  );
+  const seccionIni = document.getElementById(activa);
+  const arranqueInicial = () => {
+    window.__inicioTituloEntrada = performance.now();
+    mascota.style.opacity = "0.01";
+    seccionIni.dataset.entrada = "final";
+    void seccionIni.offsetHeight;
+    void mascota.offsetHeight;
+    aparecer(activa, "inicio");
+  };
+  if (reducido.matches) {
+    arranqueInicial();
+  } else {
+    requestAnimationFrame(arranqueInicial);
+  }
 
   reducido.addEventListener("change", () => {
     if (reducido.matches) {

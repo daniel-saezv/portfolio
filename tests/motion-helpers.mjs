@@ -41,6 +41,51 @@ export async function waitFonts(page) {
 
 export async function setupEventLog(page) {
   await page.addInitScript(() => {
+    window.__cyMascota = (m) => {
+      const s = m.offsetWidth || m.getBoundingClientRect().height;
+      const r = m.getBoundingClientRect();
+      const extra = r.height - s;
+      return r.top + s / 2 - extra / 2;
+    };
+    window.__arcY = (m) => {
+      let arc = 0;
+      for (const a of m.getAnimations()) {
+        const kfs = a.effect?.getKeyframes?.() || [];
+        if (!kfs.some((k) => String(k.transform || "").includes("translateY(")))
+          continue;
+        if (kfs.some((k) => String(k.transform || "").includes("translate(")))
+          continue;
+        const timing = a.effect.getComputedTiming();
+        const ct = a.currentTime;
+        if (ct == null || !timing.duration) continue;
+        const pairs = kfs
+          .map((k, i) => ({
+            off: k.computedOffset ?? k.offset ?? i / Math.max(1, kfs.length - 1),
+            y: parseFloat(
+              String(k.transform || "").match(/translateY\((-?[\d.]+)px\)/)?.[1] ||
+                "0"
+            ),
+          }))
+          .sort((x, y) => x.off - y.off);
+        const p = ct / timing.duration;
+        let y0 = 0;
+        let y1 = 0;
+        let o0 = 0;
+        let o1 = 1;
+        for (let i = 0; i < pairs.length - 1; i++) {
+          if (p >= pairs[i].off && p <= pairs[i + 1].off) {
+            o0 = pairs[i].off;
+            o1 = pairs[i + 1].off;
+            y0 = pairs[i].y;
+            y1 = pairs[i + 1].y;
+            break;
+          }
+        }
+        const u = o1 > o0 ? (p - o0) / (o1 - o0) : 0;
+        arc = Math.min(arc, y0 + (y1 - y0) * u);
+      }
+      return Math.abs(arc);
+    };
     window.__eventos = [];
     ["brote:salto", "brote:aterrizaje", "brote:reposo"].forEach((n) =>
       document.addEventListener(n, (e) =>

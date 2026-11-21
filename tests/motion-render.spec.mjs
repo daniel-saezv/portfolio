@@ -73,7 +73,8 @@ async function instalarMuestreoC15Raf(page) {
         w: r.width,
         h: r.height,
         cx: (r.left + r.right) / 2,
-        cy: r.top + (m.offsetWidth || r.height) / 2,
+        cy: window.__cyMascota(m),
+        arcY: window.__arcY(m),
         frac: r.height > 0 ? vis / r.height : 0,
         estado: m.dataset.estado,
       });
@@ -173,14 +174,17 @@ async function criterio15Nav(page, width, href, sectionId, opts = {}) {
   const flightFrames = frames.filter(
     (f) =>
       f.estado === "salto" &&
-      f.t >= Math.min(clickT, salto?.t ?? clickT) - 50
+      salto &&
+      f.t >= salto.t - 16 &&
+      (!aterri || f.t <= aterri.t + 24)
   );
   if (!salto) {
     fail(`${width}px C15 ${sectionId}: sin evento brote:salto`);
   }
   const { arcs: segmentArcs, max: arcSpan, n: nSaltos } = medirArcosSaltos(
     flightFrames,
-    salto
+    salto,
+    { aterrizajeT: aterri?.t }
   );
   if (
     !scrollDemoLogeado &&
