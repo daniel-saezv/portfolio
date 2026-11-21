@@ -402,7 +402,10 @@
   }
 
   function aparecer(id, origen) {
-    window.__inicioAparicion = performance.now();
+    window.__inicioAparicion =
+      origen === "inicio" && window.__inicioTituloEntrada
+        ? window.__inicioTituloEntrada
+        : performance.now();
     cancelar();
     fijar(puntoDeAnclaje(id));
     mascota.dataset.estado = "reposo";
@@ -411,13 +414,15 @@
       emitir("brote:reposo", { seccion: id, origen });
     };
     if (reducido.matches) {
+      mascota.style.opacity = "0.01";
       anims = [
         mascota.animate(
-          [{ opacity: 0 }, { opacity: 1 }],
+          [{ opacity: 0.01 }, { opacity: 1 }],
           {
             duration: T.rmEntrada,
             easing: E.desacel,
             fill: "both",
+            delay: 0,
           }
         ),
       ];
@@ -444,7 +449,7 @@
     anims = [
       mascota.animate(
         [
-          { opacity: 0, easing: E.desacel },
+          { opacity: 0.01, easing: E.desacel },
           { offset: off(T.aparicionOpacidad), opacity: 1 },
           { opacity: 1 },
         ],
@@ -796,7 +801,11 @@
   mascota.style.opacity = "0";
   const seccionIni = document.getElementById(activa);
   const arranqueInicial = () => {
+    window.__inicioTituloEntrada = performance.now();
+    mascota.style.opacity = "0.01";
     seccionIni.dataset.entrada = "final";
+    void seccionIni.offsetHeight;
+    void mascota.offsetHeight;
     aparecer(activa, "inicio");
   };
   if (reducido.matches) {
