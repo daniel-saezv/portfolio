@@ -56,6 +56,20 @@ Notas aplicables a cualquier repositorio de **daniel-saezv** al usar agentes en 
 - Para comprobar disponibilidad en un repo, en GraphQL consulta `suggestedActors(capabilities: [CAN_BE_ASSIGNED])`: debe aparecer `copilot-swe-agent`.
 - La PR figura con **autor** el usuario que asignó la issue; Copilot es **coautor** de los commits. La PR se abre en **draft**.
 
+### Copilot: elegir y comprobar el modelo
+
+Verificado en pruebas reales el **2026-11-21** (issues #9 y #10; PR #11 cerrada sin merge).
+
+- Para elegir el modelo, asigna la issue a `copilot-swe-agent[bot]` y pasa `agent_assignment.model`.
+- **REST:** `POST /repos/{owner}/{repo}/issues` o `POST /repos/{owner}/{repo}/issues/{n}/assignees`, cabecera `X-GitHub-Api-Version: 2022-11-28`, cuerpo con `assignees: ["copilot-swe-agent[bot]"]` y `agent_assignment: { target_repo, base_branch, custom_instructions, custom_agent, model }`.
+- **GraphQL:** `agentAssignment.model` con cabecera `GraphQL-Features: coding_agent_model_selection`.
+- Sin `model` se usa **Auto**.
+- Los valores son identificadores en minúsculas. Verificado: `claude-haiku-4.5`. La lista de valores de la doc REST está desactualizada: `claude-sonnet-4.6` ya no está disponible. Antes de elegir, consulta la página «Changing the AI model» en docs.github.com.
+- Un modelo inválido o no disponible **no** devuelve error HTTP: la issue se crea con **201** y Copilot comenta *The selected model isn't available…* sin abrir sesión ni PR. Revisa siempre los comentarios de la issue tras asignar.
+- El modelo realmente usado se lee en el log del workflow **Running Copilot cloud agent** (`GET /repos/{owner}/{repo}/actions/runs/{id}/logs`), línea `[cca-engine] Model resolution: … → resolved="<modelo>"`.
+- También aparece en el campo `model` de las sesiones de `GET /agents/tasks/{id}` (API `2026-03-10`), con permiso de repositorio **Agent tasks**. No figura en la PR.
+- El token compartido de los agentes es `GITHUB_COPILOT_TOKEN` (fine-grained PAT de daniel-saezv). Nunca se imprime ni se guarda en archivos.
+
 ### Configuración que solo puede hacer el dueño del repo
 
 - Activar **GitHub Pages** (*Settings → Pages → Source: GitHub Actions*) exige permisos `pages=write` y `administration=write`. Ninguna credencial de los agentes los tiene: la conexión de Cursor limita `pages` y `administration` a lectura. Hay que hacerlo a mano una vez por repositorio.
