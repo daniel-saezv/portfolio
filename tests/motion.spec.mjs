@@ -1039,7 +1039,7 @@ async function main() {
 
     console.log("\n" + JSON.stringify({ criterios }, null, 2));
     console.log(
-      "\n(Vídeos motion-v2-* los genera tests/motion-render.spec.mjs)\n"
+      "\n(Vídeos motion-v3-* y trayectorias los genera tests/motion-render.spec.mjs)\n"
     );
   } finally {
     await browser.close();

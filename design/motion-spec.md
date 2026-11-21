@@ -120,17 +120,16 @@ Con retarget (A = 0): 240 / 520 / 800 y 480 / 760 / 1040.
 - A + 72 ms: **−14° / +14°** (estado `salto`: se abren). Se mantienen así hasta tocar suelo.
 - Las hojas llegan 24 ms después que el cuerpo: se leen como algo blando que va detrás.
 
-**Origen o destino fuera del viewport.** La mascota vive en el documento, así que el salto va entre posiciones del documento. La zona visible es `[scrollY + alto de la barra, scrollY + innerHeight]`.
+**Navegación con scroll (clic en el nav o foco de teclado).** Sustituye a la regla de «entrar desde el borde» (v1), que en la PR #8 se leía como una aparición de ~100 ms.
 
-- Si el **origen** está fuera, el origen efectivo es `x` del origen con:
-  - `y = scrollY − tamaño − 8` si estaba por arriba;
-  - `y = scrollY + innerHeight + 8` si estaba por abajo.
-
-  La mascota se coloca ahí sin animación, fuera de vista, y entra saltando desde el borde por donde se fue, en el sentido del scroll.
-- Si el **destino** está fuera, se recorta igual y al terminar se coloca en el destino real sin animación, también fuera de vista.
-- Si **ambos** están fuera, se coloca sin animación y se emiten `salto`, `aterrizaje` y `reposo` seguidos.
-- Así nunca hay un viaje largo invisible que gaste el tiempo fuera de pantalla, y lo que se ve es siempre continuo.
-- Ejemplo de Sobre mí → Enlaces con clic: el scroll suave termina, Sobre mí ya está fuera por arriba, y la mascota entra desde el borde superior con 1 o 2 saltitos hasta el título de Enlaces.
+- **Brote acompaña el scroll.** Desde el inicio del scroll suave hasta `scrollend`, Brote mantiene su posición **en pantalla**: cada fotograma (rAF) se le suma a su `translate` el desplazamiento de scroll acumulado. No avanza ni salta: la vista lo encuentra donde lo dejó.
+- Si al empezar el scroll Brote no está en la zona visible `[alto de la barra, innerHeight]`, se coloca sin animación fuera de vista, justo bajo la barra (`top = alto de la barra − tamaño`), y se trata igual.
+- **Al terminar el scroll** (`scrollend`, o 120 ms sin scroll, tope 1500 ms) sale `brote:salto` desde esa posición en pantalla hacia el título destino, con las fases de esta sección: anticipación 80 ms incluida.
+- **Saltitos:** `n` según la distancia en pantalla (tabla de arriba), con **mínimo n = 1 completo**. Aunque la distancia sea casi 0, el saltito existe con la altura mínima `h = 0.5·tamaño` (24 px escritorio, 18 px móvil).
+- **Duración mínima de la entrada:** 560 ms de `brote:salto` a `brote:reposo` (320 ms hasta `brote:aterrizaje`), todo dentro de la zona visible.
+- Destino fuera de la zona visible tras el scroll (caso raro: tope de 1500 ms): se recoloca sin animación y se emiten `salto`, `aterrizaje` y `reposo` seguidos.
+- El scroll manual (rueda o dedo) no usa esta regla: la mascota sigue en el documento y salta cuando la sección gana el debounce de 150 ms.
+- Por qué: el ojo sigue a Brote, no al contenido. Esperar en su sitio y quedarse fuera de vista la hace desaparecer y reaparecer; acompañar el scroll la mantiene visible y el salto final es entero.
 
 **Cambio de sección a mitad de salto**: nunca se encola ni se termina el viaje anterior.
 
@@ -234,7 +233,7 @@ La sección activa se decide con la lógica de Jaina (§8.5): clic en ancla con 
 
 - **Por qué el salto espera a que acabe el scroll en vez de sincronizarse con él**:
   - La duración del scroll suave la decide el navegador y no se puede fijar, así que no se podría verificar.
-  - Al terminar, el destino ya está en pantalla y, con el origen recortado (§11.1), el salto es corto, entero y en el sentido del scroll.
+  - Al terminar, el destino ya está en pantalla y Brote, que ha acompañado el scroll (§11.1), salta desde su posición en pantalla con al menos un saltito completo.
 - **Debounce de 150 ms**: al cruzar Habilidades con un scroll rápido hacia Enlaces no hay paradas intermedias. 150 ms es menos de lo que se tarda en empezar a leer.
 - **Propuesta añadida (pendiente del visto bueno de Jaina)**: si `scrollY ≤ 2`, la activa es la primera sección.
   - Sin esta regla, en pantallas donde cabe toda la página, la regla de «final de página» de la maqueta activa Enlaces al cargar. Lo he medido con un viewport de 1440×2400 en la maqueta original: activa «enlaces».
@@ -328,7 +327,7 @@ Se verifican con DevTools: Animations (velocidad 10 %), Performance, Rendering �
     - Escalas del `svg`: `1.1,0.9` → `0.86,1.18` → `0.92,1.08` → (`1.1,0.9` en los contactos) → `1.2,0.8` → `0.96,1.04` → `1,1`, en los instantes de §11.1 y §11.2.
 13. Hojas: ∓14° en el aire (A + 72 ms), ±12° a llegada + 80 ms y 0° a llegada + 240 ms, girando sobre `32px 20px` del viewBox.
 14. Cambio de destino a mitad de viaje: el rumbo cambia desde la posición visual actual, sin saltos de posición, escala ni ángulo y sin anticipación. Se emite un `brote:salto` nuevo y no hay `aterrizaje` ni `reposo` del viaje abandonado.
-15. Con el origen fuera de la zona visible, la mascota entra desde el borde (arriba o abajo) por el que se fue. Con origen y destino fuera, se recoloca sin animación.
+15. Navegación con clic en el nav o foco: en cada fotograma desde el clic hasta `brote:reposo`, Brote está al menos al 50 % dentro de la zona visible; durante el scroll suave su posición en pantalla varía ≤ 2 px entre fotogramas; de `brote:salto` a `brote:aterrizaje` hay ≥ 320 ms y a `brote:reposo` ≥ 560 ms; el salto tiene n ≥ 1 saltito completo con arco ≥ 0.5·tamaño (24 px escritorio, 18 px móvil).
 16. Eventos: los nombres son exactamente `brote:salto`, `brote:aterrizaje` y `brote:reposo`, con `detail` `{desde,hasta,origen}`, `{seccion}` y `{seccion,origen?}`. Burbujean y `data-estado` cambia en el mismo instante.
 17. Pestaña oculta: el viaje termina al instante y emite los eventos que faltaban. El idle queda en `paused`.
 18. Entrada de sección: `opacity 0→1` y `translateY(16px→0)` en 480 ms con `cubic-bezier(0.22,1,0.36,1)` al entrar el 12 % de la sección, una sola vez. Sin JS todo es visible.

@@ -86,8 +86,8 @@
   const tr = (p) => `translate(${p.x}px, ${p.y}px)`;
 
   function fijar(p) {
-    mascota.style.setProperty("--brote-x", p.x + "px");
-    mascota.style.setProperty("--brote-y", p.y + "px");
+    mascota.style.setProperty("--brote-x", Math.round(p.x) + "px");
+    mascota.style.setProperty("--brote-y", Math.round(p.y) + "px");
   }
 
   function cancelar() {
@@ -142,12 +142,17 @@
     const nav = document.querySelector(".nav");
     const arriba = scrollY + nav.offsetHeight;
     const abajo = scrollY + innerHeight;
-    const visible = (p) => p.y + s > arriba && p.y < abajo;
+    const visibleDoc = (p) => p.y + s > arriba && p.y < abajo;
     const recorta = (p) =>
-      visible(p)
+      visibleDoc(p)
         ? p
         : { x: p.x, y: p.y < arriba ? scrollY - s - 8 : abajo + 8 };
-    if (!visible(o0) && !visible(destReal)) {
+    const navOrigen = origen === "ancla" || origen === "foco";
+    if (
+      navOrigen &&
+      !visibleDoc(o0) &&
+      !visibleDoc(destReal)
+    ) {
       colocar(hasta);
       const desdeEvento = retarget && viajeDestino ? viajeDestino : desde;
       viajeDestino = null;
@@ -156,12 +161,30 @@
       emitir("brote:reposo", { seccion: hasta, origen });
       return;
     }
-    const o = recorta(o0);
-    const d = recorta(destReal);
+    if (!navOrigen && !visibleDoc(o0) && !visibleDoc(destReal)) {
+      colocar(hasta);
+      const desdeEvento = retarget && viajeDestino ? viajeDestino : desde;
+      viajeDestino = null;
+      emitir("brote:salto", { desde: desdeEvento, hasta, origen });
+      emitir("brote:aterrizaje", { seccion: hasta });
+      emitir("brote:reposo", { seccion: hasta, origen });
+      return;
+    }
+    const o =
+      navOrigen || visibleDoc(o0) ? o0 : recorta(o0);
+    const d =
+      navOrigen || visibleDoc(destReal) ? destReal : recorta(destReal);
     fijar(o);
-    const dist = Math.hypot(d.x - o.x, d.y - o.y);
-    const nS = dist <= 320 ? 1 : dist <= 640 ? 2 : 3;
-    const h = Math.min(0.5 * s + 0.25 * (dist / nS), 1.5 * s);
+    const oPant = { x: o.x - scrollX, y: o.y - scrollY };
+    const dPant = { x: d.x - scrollX, y: d.y - scrollY };
+    const dist = Math.hypot(dPant.x - oPant.x, dPant.y - oPant.y);
+    let nS = dist <= 320 ? 1 : dist <= 640 ? 2 : 3;
+    nS = Math.max(1, nS);
+    const hMin = 0.5 * s;
+    const h = Math.max(
+      hMin,
+      Math.min(0.5 * s + 0.25 * (dist / nS), 1.5 * s)
+    );
     const A = retarget ? 0 : T.anticipacion;
     const llegada = A + nS * T.salto + (nS - 1) * T.contacto;
     const total = llegada + T.hojas;
@@ -406,6 +429,79 @@
   let pendiente = null;
   let tQuieto = 0;
   let tTope = 0;
+  let rafScroll = 0;
+  let ultimoScrollY = 0;
+  let acompanandoScroll = false;
+
+  function navAlto() {
+    return document.querySelector(".nav").offsetHeight;
+  }
+
+  function posDocDesdeCss() {
+    const cs = getComputedStyle(mascota);
+    return {
+      x: parseFloat(cs.getPropertyValue("--brote-x")) || 0,
+      y: parseFloat(cs.getPropertyValue("--brote-y")) || 0,
+    };
+  }
+
+  function visibleEnZona(pantY) {
+    const s = mascota.offsetWidth;
+    const navH = navAlto();
+    const top = pantY;
+    const bottom = pantY + s;
+    const inter =
+      Math.min(bottom, innerHeight) - Math.max(top, navH);
+    return inter >= 0.5 * s;
+  }
+
+  function colocarBajoNav() {
+    const s = mascota.offsetWidth;
+    const navH = navAlto();
+    const p = posDocDesdeCss();
+    fijar({ x: p.x, y: scrollY + navH - s });
+  }
+
+  function pararAcompanarScroll() {
+    acompanandoScroll = false;
+    if (rafScroll) {
+      cancelAnimationFrame(rafScroll);
+      rafScroll = 0;
+    }
+  }
+
+  function tickAcompanarScroll() {
+    if (!acompanandoScroll || !pendiente || viajando) {
+      pararAcompanarScroll();
+      return;
+    }
+    const delta = scrollY - ultimoScrollY;
+    if (delta !== 0) {
+      const p = posDocDesdeCss();
+      fijar({ x: p.x, y: p.y + delta });
+      ultimoScrollY = scrollY;
+    }
+    rafScroll = requestAnimationFrame(tickAcompanarScroll);
+  }
+
+  function sincDocConPantalla() {
+    const r = mascota.getBoundingClientRect();
+    fijar({ x: r.left + scrollX, y: r.top + scrollY });
+  }
+
+  function iniciarAcompanarScroll() {
+    if (reducido.matches) return;
+    pararAcompanarScroll();
+    const r = mascota.getBoundingClientRect();
+    if (!visibleEnZona(r.top)) {
+      colocarBajoNav();
+    } else {
+      sincDocConPantalla();
+    }
+    ultimoScrollY = scrollY;
+    acompanandoScroll = true;
+    rafScroll = requestAnimationFrame(tickAcompanarScroll);
+  }
 
   function setActiva(id, origen) {
     if (id === activa && !pendiente) return;
@@ -428,14 +524,17 @@
       viajar(viajeDestino || desde, id, origen);
       return;
     }
+    const navScroll = origen === "ancla" || origen === "foco";
     pendiente = {
       desde: pendiente ? pendiente.desde : desde,
       hasta: id,
       origen:
         pendiente && pendiente.hasta === id ? pendiente.origen : origen,
+      navScroll,
     };
     clearTimeout(tQuieto);
     clearTimeout(tTope);
+    if (navScroll) iniciarAcompanarScroll();
     tQuieto = setTimeout(lanzarPendiente, T.quietud);
     tTope = setTimeout(lanzarPendiente, T.topeEspera);
   }
@@ -444,6 +543,7 @@
     pendiente = null;
     clearTimeout(tQuieto);
     clearTimeout(tTope);
+    pararAcompanarScroll();
   }
 
   function lanzarPendiente() {
@@ -456,6 +556,14 @@
   addEventListener(
     "scroll",
     () => {
+      if (pendiente?.navScroll && !viajando) {
+        const delta = scrollY - ultimoScrollY;
+        if (delta !== 0) {
+          const p = posDocDesdeCss();
+          fijar({ x: p.x, y: p.y + delta });
+          ultimoScrollY = scrollY;
+        }
+      }
       if (pendiente) {
         clearTimeout(tQuieto);
         tQuieto = setTimeout(lanzarPendiente, T.quietud);
@@ -572,7 +680,7 @@
   secciones.forEach((s) => ioEntrada.observe(s));
 
   const recolocar = () => {
-    if (activa && !viajando) fijar(puntoDeAnclaje(activa));
+    if (activa && !viajando && !pendiente) fijar(puntoDeAnclaje(activa));
   };
   addEventListener("resize", recolocar);
   new ResizeObserver(recolocar).observe(document.body);
