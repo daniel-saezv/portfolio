@@ -131,9 +131,11 @@ Con retarget (A = 0): 240 / 520 / 800 y 480 / 760 / 1040.
   - `0` al empezar → `xCarril − xAncla` al terminar la anticipación + 40 % del primer saltito, curva `cubic-bezier(0.33,0,0.67,1)`;
   - se mantiene en el carril;
   - vuelve a `0` desde el 60 % del último saltito hasta tocar suelo, misma curva.
-  - Con n = 1, salida y vuelta van dentro del mismo saltito (0–40 % y 60–100 %).
+  - Con n = 1 no hay tramo de carril de 48 ms. Se usa la caja que barre Brote en línea recta del origen al destino:
+    - si no se cruza con ninguna línea de texto, el salto va recto, sin carril;
+    - si se cruza, se fuerza n = 2: total 840 ms, con salida en el primer saltito y vuelta en el segundo.
 - El avance vertical, el arco, la forma y los tiempos no cambian. El total sigue siendo 560 / 840 / 1120 ms.
-- Con retarget, la salida al carril parte del `translateX` actual. Si Brote ya está en el carril, se queda en él.
+- Con retarget (incluidos los clics rápidos), el viaje relanzado aplica el carril igual que uno nuevo: parte del `translateX` actual, llega al carril al 40 % de su primer saltito y vuelve desde el 60 % del último. Si Brote ya está en el carril, se queda en él. La única excepción es la regla de n = 1 con trayecto recto despejado.
 - Con reduced-motion no aplica: fundido sin desplazamiento.
 
 **Navegación con scroll (clic en el nav o foco de teclado).** Sustituye a la regla de «entrar desde el borde» (v1), que en la PR #8 se leía como una aparición de ~100 ms.
@@ -359,3 +361,4 @@ Se verifican con DevTools: Animations (velocidad 10 %), Performance, Rendering �
 24. A 320 px de ancho no aparece scroll horizontal en ningún momento.
 25. No queda ninguna marca `PROVISIONAL – movimiento de Sylvanas` en el código entregado.
 26. Carril de vuelo: entre `brote:salto` y `brote:aterrizaje`, a 390 px y 1440 px, la caja de Brote no se cruza con la caja de ninguna línea de texto (párrafos, rasgos, chips, enlaces). Solo se exceptúan los títulos de origen y destino durante los 120 ms primeros y últimos. En el carril, el borde izquierdo de Brote está en `max(4px, xTexto − tamaño − 8px)` con ±1 px.
+27. Ningún viaje tiene un tramo de carril de menos de 120 ms: o va recto sin carril (n = 1 con trayecto despejado), o tiene n ≥ 2. Los viajes relanzados por clics rápidos cumplen el criterio 26 y van por el carril salvo esa excepción.
