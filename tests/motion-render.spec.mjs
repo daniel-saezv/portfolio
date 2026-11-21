@@ -13,12 +13,17 @@ import {
 } from "./motion-helpers.mjs";
 import {
   alturaArcoRenderizada,
+  arcosPorSegmento,
+  arcosPorTiempo,
+  compensarScroll,
+  nSaltosDesdeSalto,
   instalarMuestreoSalto,
   extraerMuestras,
   recortarSalto,
   panelTrayectoria,
   combinarPaneles,
   informarArco,
+  guardarGraficoArco,
 } from "./trajectory-overlay.mjs";
 
 const artifactDir = "/opt/cursor/artifacts";
@@ -30,6 +35,7 @@ const NAV_FLOW = [
 ];
 
 const H_MIN = { 390: 18, 1440: 24 };
+const H_MAX = { 390: 54, 1440: 72 };
 
 function fail(msg) {
   console.error(`FALLO render: ${msg}`);
@@ -40,14 +46,13 @@ function ok(msg) {
   console.log(`  OK — ${msg}`);
 }
 
-async function instalarMuestreoC15(page) {
+async function instalarMuestreoC15Raf(page) {
   await page.evaluate(() => {
-    window.__c15 = [];
-    window.__c15Active = false;
-    window.__c15Scroll = true;
-    let prevTop = null;
+    let on = false;
+    let prev = null;
+    let rafId = 0;
     const sample = () => {
-      if (!window.__c15Active) return;
+      if (!on) return;
       const m = document.getElementById("mascota");
       const r = m.getBoundingClientRect();
       const nh = document.querySelector(".nav").offsetHeight;
@@ -55,210 +60,177 @@ async function instalarMuestreoC15(page) {
         0,
         Math.min(r.bottom, innerHeight) - Math.max(r.top, nh)
       );
-      const frac = r.height > 0 ? vis / r.height : 0;
+      const sy = scrollY;
       let drift = null;
-      if (window.__c15Scroll && prevTop !== null) {
-        drift = Math.abs(r.top - prevTop);
+      if (prev && sy !== prev.sy) {
+        drift = Math.abs(r.top - prev.top);
       }
-      window.__c15.push({
+      window.__c15f.push({
         t: performance.now(),
-        left: r.left,
         top: r.top,
-        w: r.width,
-        h: r.height,
-        cx: (r.left + r.right) / 2,
-        cy: (r.top + r.bottom) / 2,
-        frac,
-        estado: m.dataset.estado,
+        sy,
         drift,
-      });
-      prevTop = r.top;
-    };
-    window.__c15Start = () => {
-      window.__c15 = [];
-      window.__c15Active = true;
-      window.__c15Scroll = true;
-      prevTop = null;
-      if (window.__c15SaltoEnd) {
-        document.removeEventListener("brote:salto", window.__c15SaltoEnd);
-      }
-      window.__c15SaltoEnd = () => {
-        window.__c15Scroll = false;
-      };
-      document.addEventListener("brote:salto", window.__c15SaltoEnd, {
-        once: true,
-      });
-      clearInterval(window.__c15Iv);
-      window.__c15Iv = setInterval(sample, 16);
-    };
-    window.__c15Stop = () => {
-      window.__c15Active = false;
-      clearInterval(window.__c15Iv);
-    };
-  });
-}
-
-async function criterio15Nav(page, width, href, sectionId) {
-  const saltoN = await page.evaluate(
-    () =>
-      window.__eventos?.filter((e) => e.nombre === "brote:salto").length ?? 0
-  );
-  const frames = [];
-  let scrollPhase = true;
-  const poll = async () => {
-    return page.evaluate(() => {
-      const m = document.getElementById("mascota");
-      const r = m.getBoundingClientRect();
-      const nh = document.querySelector(".nav").offsetHeight;
-      const vis = Math.max(
-        0,
-        Math.min(r.bottom, innerHeight) - Math.max(r.top, nh)
-      );
-      return {
-        t: performance.now(),
-        left: r.left,
-        top: r.top,
-        sy: scrollY,
         w: r.width,
         h: r.height,
         cx: (r.left + r.right) / 2,
         cy: (r.top + r.bottom) / 2,
         frac: r.height > 0 ? vis / r.height : 0,
         estado: m.dataset.estado,
-      };
-    });
-  };
+      });
+      prev = { top: r.top, sy };
+    };
+    const loop = () => {
+      if (!on) return;
+      sample();
+      rafId = requestAnimationFrame(loop);
+    };
+    window.__c15f = [];
+    window.__c15Sample = () => {
+      if (on) sample();
+    };
+    window.__c15Arm = () => {
+      window.__c15f = [];
+      on = true;
+      prev = null;
+      window.__c15ClickT = performance.now();
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(loop);
+    };
+    window.__c15Stop = () => {
+      on = false;
+      cancelAnimationFrame(rafId);
+    };
+  });
+}
+
+async function criterio15Nav(page, width, href, sectionId) {
+  const hMin = H_MIN[width] || 24;
+  const hMax = H_MAX[width] || 72;
+  await instalarMuestreoC15Raf(page);
+  await page.evaluate(() => window.__c15Arm());
   await page.click(`nav a[href="${href}"]`);
-  const deadline = Date.now() + 18000;
-  let prevTop = null;
-  let prevSy = null;
-  while (Date.now() < deadline) {
-    const f = await poll();
-    const drift =
-      scrollPhase &&
-      prevTop !== null &&
-      prevSy !== null &&
-      f.sy !== prevSy
-        ? Math.abs(f.top - prevTop)
-        : null;
-    frames.push({ ...f, drift });
-    prevTop = f.top;
-    prevSy = f.sy;
-    const saltos = await page.evaluate(
-      () =>
-        window.__eventos?.filter((e) => e.nombre === "brote:salto").length ?? 0
-    );
-    if (saltos > saltoN) scrollPhase = false;
-    const done = await page.evaluate(
-      (id) => {
-        const m = document.getElementById("mascota");
-        const ev = window.__eventos || [];
-        const last = ev.filter((e) => e.nombre === "brote:reposo").at(-1);
-        return (
-          last?.detail?.seccion === id &&
-          m.dataset.estado === "reposo" &&
-          m.getAnimations().length === 0
-        );
-      },
-      sectionId
-    );
-    if (done && frames.length > 12) break;
+  const fin = Date.now() + 22000;
+  while (Date.now() < fin) {
+    await page.evaluate(() => window.__c15Sample?.());
+    const done = await page.evaluate((id) => {
+      const ev = window.__eventos || [];
+      const reposos = ev.filter((e) => e.nombre === "brote:reposo");
+      const last = reposos.at(-1);
+      if (!last || last.detail.seccion !== id) return false;
+      const m = document.getElementById("mascota");
+      if (m.dataset.estado !== "reposo") return false;
+      if (m.getAnimations().length > 0) return false;
+      if (document.body.dataset.seccionActiva !== id) return false;
+      return true;
+    }, sectionId);
+    if (done) break;
     await page.waitForTimeout(16);
   }
-  await waitReposoEnSeccion(page, sectionId);
-  const analisis = await page.evaluate(
-    ({ frames, hMin, sectionId }) => {
-      const ev = window.__eventos || [];
-      const filtered = frames;
-      const salto = ev.filter((e) => e.nombre === "brote:salto").at(-1);
-      const aterri = ev
-        .filter(
-          (e) =>
-            e.nombre === "brote:aterrizaje" &&
-            salto &&
-            e.t >= salto.t &&
-            e.detail?.seccion === sectionId
-        )
-        .at(-1);
-      const reposo = ev
-        .filter(
-          (e) =>
-            e.nombre === "brote:reposo" &&
-            salto &&
-            e.t >= salto.t &&
-            e.detail?.seccion === sectionId
-        )
-        .at(-1);
-      const dtA = salto && aterri ? aterri.t - salto.t : null;
-      const dtR = salto && reposo ? reposo.t - salto.t : null;
-      const minFrac = Math.min(...filtered.map((f) => f.frac));
-      const scrollDrifts = filtered
-        .filter((f) => f.drift !== null && f.estado === "reposo")
-        .map((f) => f.drift)
-        .slice(2);
-      const maxDrift = scrollDrifts.length
-        ? Math.max(...scrollDrifts)
-        : 0;
-      const saltoFrames = filtered.filter((f) => f.estado === "salto");
-      const puntos = saltoFrames.map((f) => ({
-        cx: f.cx ?? (f.left + f.w / 2),
-        cy: f.cy,
-      }));
-      let arcSpan = 0;
-      if (puntos.length >= 3) {
-        for (let i = 0; i < puntos.length; i++) {
-          const t = i / (puntos.length - 1);
-          const expCy =
-            puntos[0].cy + t * (puntos[puntos.length - 1].cy - puntos[0].cy);
-          const expCx =
-            puntos[0].cx + t * (puntos[puntos.length - 1].cx - puntos[0].cx);
-          arcSpan = Math.max(
-            arcSpan,
-            Math.hypot(puntos[i].cx - expCx, puntos[i].cy - expCy)
-          );
-        }
-        arcSpan = Math.round(arcSpan * 10) / 10;
-      }
-      return {
-        frames: filtered.length,
-        minFrac,
-        maxDrift,
-        dtA,
-        dtR,
-        arcSpan,
-        hMin,
-      };
-    },
-    { frames, hMin: H_MIN[width] || 24, sectionId }
+  await waitReposoEnSeccion(page, sectionId, 4000);
+  await page.evaluate(() => window.__c15Stop());
+  const { frames, ev, clickT } = await page.evaluate(() => ({
+    frames: window.__c15f || [],
+    ev: window.__eventos || [],
+    clickT: window.__c15ClickT ?? 0,
+  }));
+  const salto = ev
+    .filter(
+      (e) =>
+        e.nombre === "brote:salto" &&
+        e.detail?.hasta === sectionId
+    )
+    .at(-1);
+  const aterri = ev
+    .filter(
+      (e) =>
+        e.nombre === "brote:aterrizaje" &&
+        salto &&
+        e.t >= salto.t &&
+        e.detail?.seccion === sectionId
+    )
+    .at(-1);
+  const reposo = ev
+    .filter(
+      (e) =>
+        e.nombre === "brote:reposo" &&
+        salto &&
+        e.t >= salto.t &&
+        e.detail?.seccion === sectionId
+    )
+    .at(-1);
+  const dtA = salto && aterri ? aterri.t - salto.t : null;
+  const dtR = salto && reposo ? reposo.t - salto.t : null;
+  const minFrac = Math.min(...frames.map((f) => f.frac), 1);
+  const scrollFrames = frames.filter(
+    (f) => salto && f.t < salto.t && f.drift !== null
   );
-  if (analisis.frames < 8) {
-    fail(`${width}px C15 ${sectionId}: pocas muestras (${analisis.frames})`);
+  const maxDrift = scrollFrames.length
+    ? Math.max(...scrollFrames.map((f) => f.drift))
+    : 0;
+  const flightFrames = frames.filter(
+    (f) =>
+      f.estado === "salto" &&
+      f.t >= Math.min(clickT, salto?.t ?? clickT) - 50
+  );
+  if (!salto) {
+    fail(`${width}px C15 ${sectionId}: sin evento brote:salto`);
   }
-  if (analisis.minFrac < 0.5) {
+  const comp = compensarScroll(flightFrames);
+  const nSaltos = nSaltosDesdeSalto(salto);
+  const segmentArcs =
+    nSaltos > 1
+      ? arcosPorTiempo(comp, nSaltos)
+      : arcosPorSegmento(comp);
+  const arcSpan = segmentArcs.length
+    ? Math.max(...segmentArcs)
+    : alturaArcoRenderizada(flightFrames, nSaltos);
+  if (frames.length < 8) {
+    fail(`${width}px C15 ${sectionId}: pocas muestras rAF (${frames.length})`);
+  }
+  if (scrollFrames.length < 3) {
     fail(
-      `${width}px C15 ${sectionId}: visibilidad mínima ${(analisis.minFrac * 100).toFixed(0)}% < 50%`
+      `${width}px C15 ${sectionId}: scroll sin fotogramas con scrollY cambiando (n=${scrollFrames.length})`
     );
   }
-  if (analisis.maxDrift > 2.05) {
+  if (minFrac < 0.5) {
     fail(
-      `${width}px C15 ${sectionId}: deriva en scroll ${analisis.maxDrift.toFixed(2)}px > 2px`
+      `${width}px C15 ${sectionId}: visibilidad mínima ${(minFrac * 100).toFixed(0)}% < 50%`
     );
   }
-  if (analisis.dtA == null || analisis.dtA < 320) {
-    fail(`${width}px C15 ${sectionId}: Δaterrizaje=${analisis.dtA}ms < 320`);
-  }
-  if (analisis.dtR == null || analisis.dtR < 560) {
-    fail(`${width}px C15 ${sectionId}: Δreposo=${analisis.dtR}ms < 560`);
-  }
-  if (analisis.arcSpan < analisis.hMin * 0.75) {
+  if (maxDrift > 2.05) {
     fail(
-      `${width}px C15 ${sectionId}: arco renderizado ${analisis.arcSpan}px < ${(analisis.hMin * 0.75).toFixed(0)}px (75% de ${analisis.hMin}px)`
+      `${width}px C15 ${sectionId}: deriva en scroll ${maxDrift.toFixed(2)}px > 2px (${scrollFrames.length} frames)`
     );
+  }
+  if (dtA == null || dtA < 320) {
+    fail(`${width}px C15 ${sectionId}: Δaterrizaje=${dtA}ms < 320`);
+  }
+  if (dtR == null || dtR < 560) {
+    fail(`${width}px C15 ${sectionId}: Δreposo=${dtR}ms < 560`);
+  }
+  if (arcSpan < hMin) {
+    fail(
+      `${width}px C15 ${sectionId}: arco ${arcSpan}px < mínimo ${hMin}px (saltitos=${segmentArcs.join(",")} vuelo=${flightFrames.length})`
+    );
+  }
+  for (const [i, a] of segmentArcs.entries()) {
+    if (a < hMin - 1) {
+      fail(
+        `${width}px C15 ${sectionId}: saltito ${i + 1} arco ${a}px < ${hMin}px`
+      );
+    }
+    const hCap = salto?.detail?.h ?? hMax;
+    const tol = nSaltos > 1 ? 30 : 12;
+    if (a > hCap + tol) {
+      fail(
+        `${width}px C15 ${sectionId}: saltito ${i + 1} arco ${a}px > diseño ${hCap}px (+${tol}px)`
+      );
+    }
   }
   ok(
-    `${width}px C15 ${sectionId}: vis≥50%, scroll Δ≤${analisis.maxDrift.toFixed(1)}px, T${analisis.dtA}/${analisis.dtR}ms, arco ${analisis.arcSpan.toFixed(0)}px`
+    `${width}px C15 ${sectionId}: vis≥50%, scroll ${scrollFrames.length} frames maxΔ=${maxDrift.toFixed(2)}px, T${dtA}/${dtR}ms, arco ${arcSpan.toFixed(1)}px (${segmentArcs.length} saltitos)`
   );
-  return analisis;
+  return { arcSpan, maxDrift, scrollFrames: scrollFrames.length };
 }
 
 async function correrFlujoNav(page, widths) {
@@ -284,14 +256,25 @@ async function assertSaltoAnimado(page, label) {
     null,
     { timeout: 16000 }
   );
+  const hMin = label.startsWith("390") ? H_MIN[390] : H_MIN[1440];
+  const hMax = label.startsWith("390") ? H_MAX[390] : H_MAX[1440];
+  const saltosPrev = await page.evaluate(
+    () => window.__eventos?.filter((e) => e.nombre === "brote:salto").length ?? 0
+  );
   await page.click('nav a[href="#enlaces"]');
   await page.waitForFunction(
     () => document.getElementById("mascota").dataset.estado === "salto",
     null,
     { timeout: 12000 }
   );
+  const saltoEv = await page.evaluate((n) => {
+    const ev = window.__eventos || [];
+    return ev.filter((e) => e.nombre === "brote:salto").slice(n).at(-1);
+  }, saltosPrev);
+  const nSaltos = saltoEv?.detail?.n > 0 ? saltoEv.detail.n : 1;
+  const hCap = (saltoEv?.detail?.h ?? hMax) + (nSaltos > 1 ? 30 : 12);
   const frames = [];
-  for (let i = 0; i < 36; i++) {
+  for (let i = 0; i < 40; i++) {
     await page.waitForTimeout(25);
     const f = await page.evaluate(() => {
       const m = document.getElementById("mascota");
@@ -299,7 +282,8 @@ async function assertSaltoAnimado(page, label) {
       const svg = m.querySelector("svg");
       const sm = new DOMMatrixReadOnly(getComputedStyle(svg).transform);
       return {
-        cy: Math.round((r.top + r.bottom) / 2),
+        t: performance.now(),
+        cy: (r.top + r.bottom) / 2,
         sy: Math.round(sm.d * 100) / 100,
         estado: m.dataset.estado,
       };
@@ -307,21 +291,20 @@ async function assertSaltoAnimado(page, label) {
     frames.push(f);
     if (f.estado === "reposo" && frames.length > 12) break;
   }
-  const cys = [...new Set(frames.map((f) => f.cy))];
+  const arcPx = alturaArcoRenderizada(frames, nSaltos);
   const scales = frames.map((f) => f.sy);
   const minScale = Math.min(...scales);
   const maxScale = Math.max(...scales);
-  const spanY = Math.max(...frames.map((f) => f.cy)) - Math.min(...frames.map((f) => f.cy));
-  const arcOk = cys.length >= 4 && spanY >= 24;
   const squashOk = minScale <= 0.94 && maxScale >= 1.08;
-  const noTeleport = frames.length >= 10 && cys.length >= 3;
+  const noTeleport = frames.length >= 10;
+  const arcOk = arcPx >= hMin - 1 && arcPx <= hCap;
   if (!arcOk || !squashOk || !noTeleport) {
     fail(
-      `${label}: arco=${arcOk} (Δy=${spanY}, puntos=${cys.length}) squash=${squashOk} (${minScale}–${maxScale}) teleport=${!noTeleport}`
+      `${label}: arco=${arcPx}px (min ${hMin} max ${hMax}) squash=${squashOk} (${minScale}–${maxScale}) muestras=${frames.length}`
     );
   }
   ok(
-    `${label}: salto con arco (Δy=${spanY}px), squash ${minScale}–${maxScale}, ${frames.length} muestras`
+    `${label}: salto arco ${arcPx}px, squash ${minScale}–${maxScale}, ${frames.length} muestras`
   );
   await waitReposoEnSeccion(page, "enlaces");
   const landed = await assertReposoRenderizado(page, "enlaces");
@@ -377,11 +360,14 @@ async function capturarSaltoScroll(page) {
   await page.waitForTimeout(300);
   await instalarMuestreoSalto(page);
   await page.evaluate(() => window.__trayStart());
-  const deadline = Date.now() + 22000;
+  for (let i = 0; i < 55; i++) {
+    await page.mouse.wheel(0, 100);
+    await page.waitForTimeout(33);
+  }
+  await page.waitForTimeout(400);
   let destinoId = null;
-  while (Date.now() < deadline) {
-    await page.mouse.wheel(0, 200);
-    await page.waitForTimeout(250);
+  const settleDeadline = Date.now() + 18000;
+  while (Date.now() < settleDeadline) {
     destinoId = await page.evaluate(() => {
       const ev = window.__eventos || [];
       const salto = ev
@@ -390,8 +376,9 @@ async function capturarSaltoScroll(page) {
       return salto?.detail?.hasta ?? null;
     });
     if (destinoId) break;
+    await page.waitForTimeout(50);
   }
-  if (!destinoId) fail("No hubo salto por scroll manual en el tiempo límite");
+  if (!destinoId) fail("No hubo salto por scroll manual tras rueda continua");
   await waitReposoEnSeccion(page, destinoId, 16000);
   const raw = await extraerMuestras(page);
   const ev = await page.evaluate(() => window.__eventos);
@@ -413,15 +400,18 @@ async function artefactoTrayectoria(
 
   const nav = await capturarSaltoNav(page, "#enlaces", "enlaces");
   const hMin = H_MIN[width] || 24;
+  const hMax = H_MAX[width] || 72;
+  const nNav = nSaltosDesdeSalto(nav.salto);
   const arcoNav = informarArco(
     `${width}px clic nav→enlaces`,
     nav.samples,
-    hMin
+    hMin,
+    hMax,
+    nNav
   );
-  if (arcoNav < hMin * 0.75) {
-    fail(
-      `${width}px arco nav ${arcoNav}px < ${(hMin * 0.75).toFixed(0)}px (75% de ${hMin}px)`
-    );
+  const tolNav = nNav > 1 ? 30 : 12;
+  if (arcoNav < hMin - 1 || arcoNav > (nav.salto?.detail?.h ?? hMax) + tolNav) {
+    fail(`${width}px arco nav ${arcoNav}px fuera de [${hMin}, ${(nav.salto?.detail?.h ?? hMax) + tolNav}]`);
   }
   const panelNav = await panelTrayectoria(
     browser,
@@ -437,14 +427,21 @@ async function artefactoTrayectoria(
   await waitFonts(page);
   await waitAparicionInicial(page);
   const scroll = await capturarSaltoScroll(page);
+  const nScroll = nSaltosDesdeSalto(scroll.salto);
   const arcoScroll = informarArco(
     `${width}px scroll→${scroll.destinoId}`,
     scroll.samples,
-    hMin
+    hMin,
+    hMax,
+    nScroll
   );
-  if (arcoScroll < hMin * 0.75) {
+  const tolScroll = nScroll > 1 ? 30 : 12;
+  if (
+    arcoScroll < hMin - 1 ||
+    arcoScroll > (scroll.salto?.detail?.h ?? hMax) + tolScroll
+  ) {
     fail(
-      `${width}px arco scroll manual ${arcoScroll}px < ${(hMin * 0.75).toFixed(0)}px (75% de ${hMin}px)`
+      `${width}px arco scroll manual ${arcoScroll}px fuera de rango (mín ${hMin})`
     );
   }
   const panelScroll = await panelTrayectoria(
@@ -460,6 +457,19 @@ async function artefactoTrayectoria(
   const out = path.join(artifactDir, archivo);
   await combinarPaneles(browser, width, height, panelNav, panelScroll, out);
   console.log(`  Trayectoria ${out}`);
+  const chartName =
+    width === 390 ? "arco-390.png" : "arco-1440.png";
+  const chartPath = path.join(artifactDir, chartName);
+  await guardarGraficoArco(
+    browser,
+    width,
+    nav.samples,
+    scroll.samples,
+    arcoNav,
+    arcoScroll,
+    chartPath
+  );
+  console.log(`  Gráfico ${chartPath}`);
   await page.close();
   return { arcoNav, arcoScroll };
 }

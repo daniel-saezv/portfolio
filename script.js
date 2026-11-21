@@ -156,7 +156,13 @@
       colocar(hasta);
       const desdeEvento = retarget && viajeDestino ? viajeDestino : desde;
       viajeDestino = null;
-      emitir("brote:salto", { desde: desdeEvento, hasta, origen });
+      emitir("brote:salto", {
+        desde: desdeEvento,
+        hasta,
+        origen,
+        n: 0,
+        h: 0,
+      });
       emitir("brote:aterrizaje", { seccion: hasta });
       emitir("brote:reposo", { seccion: hasta, origen });
       return;
@@ -165,7 +171,13 @@
       colocar(hasta);
       const desdeEvento = retarget && viajeDestino ? viajeDestino : desde;
       viajeDestino = null;
-      emitir("brote:salto", { desde: desdeEvento, hasta, origen });
+      emitir("brote:salto", {
+        desde: desdeEvento,
+        hasta,
+        origen,
+        n: 0,
+        h: 0,
+      });
       emitir("brote:aterrizaje", { seccion: hasta });
       emitir("brote:reposo", { seccion: hasta, origen });
       return;
@@ -177,8 +189,9 @@
     fijar(o);
     const oPant = { x: o.x - scrollX, y: o.y - scrollY };
     const dPant = { x: d.x - scrollX, y: d.y - scrollY };
-    const dist = Math.hypot(dPant.x - oPant.x, dPant.y - oPant.y);
+    const dist = Math.hypot(d.x - o.x, d.y - o.y);
     let nS = dist <= 320 ? 1 : dist <= 640 ? 2 : 3;
+    if (nS === 1 && dist > 360) nS = 2;
     nS = Math.max(1, nS);
     const hMin = 0.5 * s;
     const h = Math.max(
@@ -192,34 +205,40 @@
     const sc = ([x, y]) => `scale(${x}, ${y})`;
 
     const kV = [{ offset: 0, transform: tr(o) }];
-    const kA = [{ offset: 0, transform: "translateY(0px)" }];
     const kF = [{ offset: 0, transform: sc([mF.a, mF.d]), easing: E.anticipa }];
     if (A) {
       kV.push({ offset: off(A), transform: tr(o) });
-      kA.push({ offset: off(A), transform: "translateY(0px)" });
       kF.push({ offset: off(A), transform: sc(F.anticipa) });
     }
     for (let i = 0; i < nS; i++) {
       const t0 = A + i * (T.salto + T.contacto);
+      const tMid = t0 + T.salto / 2;
       const t1 = t0 + T.salto;
+      const fracEnd = (i + 1) / nS;
+      const fracMid = (i + 0.5) / nS;
       const p1 = {
-        x: o.x + ((d.x - o.x) * (i + 1)) / nS,
-        y: o.y + ((d.y - o.y) * (i + 1)) / nS,
+        x: o.x + (d.x - o.x) * fracEnd,
+        y: o.y + (d.y - o.y) * fracEnd,
+      };
+      const pApex = {
+        x: o.x + (d.x - o.x) * fracMid,
+        y: o.y + (d.y - o.y) * fracMid - h,
       };
       if (i > 0) {
         kV.push({ offset: off(t0), transform: kV.at(-1).transform });
-        kA.push({ offset: off(t0), transform: "translateY(0px)" });
         kF.push({ offset: off(t0), transform: sc(F.contacto) });
       }
       kV.at(-1).easing = E.cuerda;
-      kV.push({ offset: off(t1), transform: tr(p1) });
-      kA.at(-1).easing = E.subida;
-      kA.push({
-        offset: off(t0 + T.salto / 2),
-        transform: `translateY(${-h}px)`,
+      kV.push({
+        offset: off(tMid),
+        transform: tr(pApex),
+        easing: E.subida,
+      });
+      kV.push({
+        offset: off(t1),
+        transform: tr(p1),
         easing: E.bajada,
       });
-      kA.push({ offset: off(t1), transform: "translateY(0px)" });
       kF.at(-1).easing = E.estira;
       kF.push({ offset: off(t0 + 0.2 * T.salto), transform: sc(F.salto) });
       kF.push({
@@ -244,7 +263,6 @@
     });
     kF.push({ offset: 1, transform: "scale(1, 1)" });
     kV.push({ offset: 1, transform: tr(d) });
-    kA.push({ offset: 1, transform: "translateY(0px)" });
     const kH = (a, signo) => [
       { offset: 0, transform: `rotate(${a}deg)`, easing: E.salida },
       {
@@ -272,11 +290,17 @@
     aterrizado = false;
     const desdeEvento = retarget && viajeDestino ? viajeDestino : desde;
     viajeDestino = hasta;
-    emitir("brote:salto", { desde: desdeEvento, hasta, origen });
+    emitir("brote:salto", {
+      desde: desdeEvento,
+      hasta,
+      origen,
+      n: nS,
+      h: Math.round(h),
+      dist: Math.round(dist),
+    });
     const opt = { duration: total, fill: "forwards" };
     anims = [
       mascota.animate(kV, opt),
-      mascota.animate(kA, { ...opt, composite: "add" }),
       svg.animate(kF, opt),
       hojaI.animate(kH(a0I, 1), opt),
       hojaD.animate(kH(a0D, -1), opt),
