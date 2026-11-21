@@ -1,14 +1,37 @@
-# portfolio
+# AGENTS.md
+
+## Reglas transversales
+
+1. Demuestra que funciona antes de darlo por hecho: comando real, test o captura.
+2. Arregla la causa raíz, no el síntoma.
+3. Resta antes de sumar: borra código muerto antes de añadir.
+4. Haz el cambio mínimo que resuelve, sin capas ni abstracciones especulativas.
+5. Los tests prueban comportamiento observable, no la implementación.
+6. Amplía un test existente antes de crear otro y borra los que dejen de aplicar.
+7. Sin comentarios en el código: que el nombre y la estructura lo expliquen.
+8. Validación y manejo de errores en los bordes del sistema, no repartidos por todo el código.
+9. Operaciones idempotentes: se pueden repetir sin daño.
+10. Una unidad verificable por commit o PR.
+11. Antes de reportar un número, explícalo y mídelo bien.
+12. Si una corrección se repite, conviértela en estructura (test, lint, tipo) y no en otra instrucción.
+13. Nunca inventes comandos, stack ni datos: solo lo comprobado.
+14. Sin ficheros `.md` largos de planes o decisiones; el porqué va en la PR o en el commit.
+15. Prosa breve y sin relleno en PRs, commits y documentación.
+16. No cambies alcance, diseño ni prioridades por tu cuenta; si algo te bloquea, dilo con exactitud.
+
+## Este proyecto
+
+portfolio
 
 Página estática de portfolio (HTML, CSS y JS vanilla) desplegada en GitHub Pages.
 
-## Stack y estructura
+### Stack y estructura
 
 - **Sitio publicado:** `index.html`, `styles.css`, `script.js` (sin build ni dependencias en runtime).
 - **CI:** `.github/workflows/deploy.yml` copia solo esos tres archivos a `_site` y despliega con GitHub Actions.
 - **Pruebas locales:** `tests/portfolio.spec.mjs`, `tests/motion.spec.mjs` y `tests/motion-render.spec.mjs` (Playwright; no se publican).
 
-## Comandos verificados
+### Comandos verificados
 
 ```bash
 # Servir en local (cualquier servidor estático estático sobre la raíz del repo)
@@ -21,33 +44,33 @@ npm test
 
 No hay paso de build del sitio.
 
-## CI/CD
+### CI/CD
 
 - Workflow `Desplegar en GitHub Pages` en cada push a `main` o manual (`workflow_dispatch`): job `build` (artefacto `_site`) y job `deploy` (entorno `github-pages`).
 - Requiere GitHub Pages habilitado con origen **GitHub Actions**.
 - El proyecto se despliega en GitHub Pages (URL del entorno `github-pages` tras el primer despliegue exitoso).
 
-### Checks recomendados en PR
+#### Checks recomendados en PR
 
 - Validación del workflow YAML.
 - Ejecución manual o en agente de `npm test` antes de merge.
 
-## Cursor Cloud
+### Cursor Cloud
 
 1. Instalar navegador de prueba: `npx --yes playwright install chromium`.
 2. Ejecutar `npm test` desde la raíz del repositorio.
 3. No se requieren secretos para pruebas locales; el despliegue usa `GITHUB_TOKEN` / permisos de Pages del repositorio.
 
-## Plataformas de agentes
+### Plataformas de agentes
 
 Notas aplicables a cualquier repositorio de **daniel-saezv** al usar agentes en la nube (no sustituyen la documentación oficial de cada proveedor).
 
-### Cursor (agente en la nube)
+#### Cursor (agente en la nube)
 
 - Se lanza desde Grok Bot o Cursor sobre la URL del repositorio.
 - El agente crea una rama y abre la PR sin intervención manual.
 
-### GitHub Copilot (agente en la nube)
+#### GitHub Copilot (agente en la nube)
 
 - Se lanza **asignando una issue** a Copilot. El login correcto es `copilot-swe-agent[bot]`. Con `Copilot` o `copilot-swe-agent`, la API responde **422** *Validation Failed (assignees: invalid)*.
 - Asignación válida vía `POST /repos/{owner}/{repo}/issues` con `assignees`, `POST /repos/{owner}/{repo}/issues/{n}/assignees` o `PATCH /repos/{owner}/{repo}/issues/{n}`. Opcionalmente se puede enviar `agent_assignment` (`target_repo`, `base_branch`, `custom_instructions`, `custom_agent`, `model`). Documentación: [Use Copilot cloud agent via the API](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/cloud-agent/use-cloud-agent-via-the-api).
@@ -56,7 +79,7 @@ Notas aplicables a cualquier repositorio de **daniel-saezv** al usar agentes en 
 - Para comprobar disponibilidad en un repo, en GraphQL consulta `suggestedActors(capabilities: [CAN_BE_ASSIGNED])`: debe aparecer `copilot-swe-agent`.
 - La PR figura con **autor** el usuario que asignó la issue; Copilot es **coautor** de los commits. La PR se abre en **draft**.
 
-### Copilot: elegir y comprobar el modelo
+#### Copilot: elegir y comprobar el modelo
 
 Verificado en pruebas reales el **2026-11-21** (issues #9 y #10; PR #11 cerrada sin merge).
 
@@ -70,6 +93,6 @@ Verificado en pruebas reales el **2026-11-21** (issues #9 y #10; PR #11 cerrada 
 - También aparece en el campo `model` de las sesiones de `GET /agents/tasks/{id}` (API `2026-03-10`), con permiso de repositorio **Agent tasks**. No figura en la PR.
 - El token compartido de los agentes es `GITHUB_COPILOT_TOKEN` (fine-grained PAT de daniel-saezv). Nunca se imprime ni se guarda en archivos.
 
-### Configuración que solo puede hacer el dueño del repo
+#### Configuración que solo puede hacer el dueño del repo
 
 - Activar **GitHub Pages** (*Settings → Pages → Source: GitHub Actions*) exige permisos `pages=write` y `administration=write`. Ninguna credencial de los agentes los tiene: la conexión de Cursor limita `pages` y `administration` a lectura. Hay que hacerlo a mano una vez por repositorio.
