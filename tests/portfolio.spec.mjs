@@ -14,7 +14,8 @@ const MIME = {
 };
 
 const SCROLL_WIDTHS = [320, 375, 390, 640, 1024, 1440];
-const SCREENSHOT_WIDTHS = [390, 1440];
+const SCREENSHOT_WIDTHS = [320, 640, 1280];
+const ARTIFACT_DIR = path.join(root, "artifacts");
 
 const CONTRAST_PAIRS = [
   { name: "bruma-50 sobre selva-800", fg: "#F3F7EF", bg: "#14453A", min: 4.5 },
@@ -150,6 +151,7 @@ async function runNavInteraction(browser, baseUrl, width) {
   const navLinks = [
     { href: "#sobre-mi", id: "sobre-mi" },
     { href: "#habilidades", id: "habilidades" },
+    { href: "#proyectos", id: "proyectos" },
     { href: "#enlaces", id: "enlaces" },
   ];
 
@@ -205,9 +207,17 @@ async function runNavInteraction(browser, baseUrl, width) {
 }
 
 /** Captura alineada con design/capturas: carga inicial, sin hover residual del test. */
-async function captureReferenceScreenshot(browser, baseUrl, width, artifactDir) {
+async function captureReferenceScreenshot(
+  browser,
+  baseUrl,
+  width,
+  artifactDir,
+  reducedMotion = false
+) {
   const page = await browser.newPage({ viewport: { width, height: 800 } });
-  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.emulateMedia({
+    reducedMotion: reducedMotion ? "reduce" : "no-preference",
+  });
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await page.waitForFunction(() => document.fonts.status === "loaded");
   await page.waitForFunction(
@@ -217,6 +227,12 @@ async function captureReferenceScreenshot(browser, baseUrl, width, artifactDir) 
   );
   await assertSingleNavActive(page, "sobre-mi");
   await assertNoHorizontalScroll(page);
+  await page.click('nav a[href="#proyectos"]');
+  await page.waitForFunction(
+    () =>
+      document.querySelector("#proyectos .esquema__lista")?.dataset.esquema ===
+      "final"
+  );
 
   await page.mouse.move(0, 0);
   await page.evaluate(() => {
@@ -225,14 +241,229 @@ async function captureReferenceScreenshot(browser, baseUrl, width, artifactDir) 
     }
   });
 
-  const shot = path.join(artifactDir, `portfolio-${width}px.png`);
+  const motion = reducedMotion ? "-reduced-motion" : "";
+  const shot = path.join(artifactDir, `proyectos-${width}px${motion}.png`);
   await page.screenshot({ path: shot, fullPage: true });
   await page.close();
   return shot;
 }
 
+async function assertProjects(browser, baseUrl) {
+  const markupPage = await browser.newPage();
+  await markupPage.emulateMedia({ reducedMotion: "reduce" });
+  await markupPage.goto(baseUrl, { waitUntil: "networkidle" });
+  const project = await markupPage.evaluate(() => {
+    const section = document.getElementById("proyectos");
+    const previous = section.previousElementSibling.previousElementSibling;
+    const next = section.nextElementSibling.nextElementSibling;
+    const link = section.querySelector(".proyecto__boton");
+    const steps = [...section.querySelectorAll(".paso")].map((step) => ({
+      title: step.querySelector(".paso__titulo").childNodes[0].textContent,
+      detail: step
+        .querySelector(".paso__detalle")
+        .textContent.replace(/\s+/g, " ")
+        .trim(),
+      index: step.style.getPropertyValue("--paso"),
+    }));
+    return {
+      previous: previous?.id,
+      next: next?.id,
+      text: section.textContent.replace(/\s+/g, " ").trim(),
+      href: link?.getAttribute("href"),
+      target: link?.getAttribute("target"),
+      rel: link?.getAttribute("rel"),
+      label: link?.getAttribute("aria-label"),
+      steps,
+    };
+  });
+  const copy = [
+    "Plantilla de GitHub",
+    "ai-agents-template",
+    "Una plantilla reutilizable para trabajar con agentes en la nube en Cursor y GitHub Copilot.",
+    "Da a los agentes las instrucciones y las herramientas para configurar por su cuenta el entorno de desarrollo de un proyecto desde cero.",
+    "Ver en GitHub",
+    "Cómo funciona",
+    "Creas tu repositorio a partir de la plantilla.",
+    "Un único archivo de reglas para los agentes.",
+    "Instrucciones reutilizables para las tareas habituales.",
+    "Un agente explora el proyecto y prepara su entorno desde cero.",
+    "Cursor y GitHub Copilot arrancan con el entorno preparado, y CI revisa las skills en cada pull request.",
+  ];
+  if (
+    project.previous !== "habilidades" ||
+    project.next !== "enlaces" ||
+    copy.some((fragment) => !project.text.includes(fragment)) ||
+    project.href !==
+      "https://github.com/daniel-saezv/ai-agents-template" ||
+    project.target !== "_blank" ||
+    !project.rel.split(/\s+/).includes("noopener") ||
+    project.steps.length !== 5 ||
+    project.steps.some((step, index) => step.index !== String(index))
+  ) {
+    throw new Error(`Contenido o estructura de Proyectos inválida: ${JSON.stringify(project)}`);
+  }
+  await markupPage.close();
+
+  const noJs = await browser.newPage({
+    javaScriptEnabled: false,
+    viewport: { width: 640, height: 800 },
+  });
+  await noJs.goto(baseUrl, { waitUntil: "networkidle" });
+  const noJsState = await noJs.evaluate(() => {
+    const node = document.querySelector("#proyectos .paso__nodo");
+    const stem = getComputedStyle(
+      document.querySelector("#proyectos .paso"),
+      "::before"
+    ).clipPath;
+    return {
+      nodeOpacity: getComputedStyle(node).opacity,
+      nodeTransform: getComputedStyle(node).transform,
+      stem,
+      movementClass: document.documentElement.classList.contains("js-movimiento"),
+    };
+  });
+  if (
+    noJsState.movementClass ||
+    noJsState.nodeOpacity !== "1" ||
+    noJsState.nodeTransform !== "none" ||
+    !["inset(0%)", "inset(0px)"].includes(noJsState.stem)
+  ) {
+    throw new Error(`Proyectos sin JS no está en estado final: ${JSON.stringify(noJsState)}`);
+  }
+  await noJs.close();
+}
+
+async function assertProjectMotion(browser, baseUrl) {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  const pending = await page.evaluate(() => ({
+    movementClass: document.documentElement.classList.contains("js-movimiento"),
+    state: document.querySelector("#proyectos .esquema__lista").dataset.esquema,
+    opacity: getComputedStyle(
+      document.querySelector("#proyectos .paso__nodo")
+    ).opacity,
+  }));
+  if (!pending.movementClass || pending.state !== "pendiente" || pending.opacity !== "0") {
+    throw new Error(`Estado inicial animable inválido: ${JSON.stringify(pending)}`);
+  }
+
+  await page.evaluate(() => {
+    window.__cambiosEsquema = [];
+    const list = document.querySelector("#proyectos .esquema__lista");
+    new MutationObserver(() => {
+      window.__cambiosEsquema.push({
+        state: list.dataset.esquema,
+        t: performance.now(),
+      });
+    }).observe(list, { attributes: true, attributeFilter: ["data-esquema"] });
+  });
+  await page.locator("#proyectos .esquema").scrollIntoViewIfNeeded();
+  await page.waitForFunction(
+    () => document.querySelector("#proyectos .esquema__lista").dataset.esquema === "final"
+  );
+  await page.waitForTimeout(1000);
+  const final = await page.evaluate(() => {
+    const nodes = [...document.querySelectorAll("#proyectos .paso__nodo")];
+    const titles = [...document.querySelectorAll("#proyectos .paso__titulo")];
+    const detail = [...document.querySelectorAll("#proyectos .paso__detalle")];
+    const stems = [...document.querySelectorAll("#proyectos .paso")].slice(0, -1);
+    const style = (el, property) => getComputedStyle(el).getPropertyValue(property);
+    return {
+      changes: window.__cambiosEsquema,
+      nodes: nodes.map((el) => ({
+        opacity: style(el, "opacity"),
+        transform: style(el, "transform"),
+        duration: style(el, "transition-duration"),
+        delay: style(el, "transition-delay"),
+        origin: style(el, "transform-origin"),
+      })),
+      texts: titles.map((el, i) => ({
+        opacity: style(el, "opacity"),
+        titleDelay: style(el, "transition-delay"),
+        detailDelay: style(detail[i], "transition-delay"),
+      })),
+      stems: stems.map((el) => ({
+        clip: getComputedStyle(el, "::before").clipPath,
+        duration: getComputedStyle(el, "::before").transitionDuration,
+        delay: getComputedStyle(el, "::before").transitionDelay,
+      })),
+    };
+  });
+  const expectedNodes = [0, 0.14, 0.28, 0.42, 0.56];
+  const expectedTexts = [0.04, 0.18, 0.32, 0.46, 0.6];
+  const expectedStems = [0.06, 0.2, 0.34, 0.48];
+  if (
+    final.changes.length !== 1 ||
+    final.changes[0].state !== "final" ||
+    final.nodes.some(
+      (node, index) =>
+        node.opacity !== "1" ||
+        node.transform !== "none" ||
+        node.duration !== "0.28s, 0.28s" ||
+        Math.abs(parseFloat(node.delay.split(",")[0]) - expectedNodes[index]) >
+          0.001
+    ) ||
+    final.texts.some(
+      (text, index) =>
+        text.opacity !== "1" ||
+        Math.abs(parseFloat(text.titleDelay.split(",")[0]) - expectedTexts[index]) >
+          0.001 ||
+        Math.abs(parseFloat(text.detailDelay.split(",")[0]) - expectedTexts[index]) >
+          0.001
+    ) ||
+    final.stems.some(
+      (stem, index) =>
+        !["inset(0%)", "inset(0px)"].includes(stem.clip) ||
+        stem.duration !== "0.14s" ||
+        Math.abs(parseFloat(stem.delay) - expectedStems[index]) > 0.001
+    )
+  ) {
+    throw new Error(`Movimiento del esquema inválido: ${JSON.stringify(final)}`);
+  }
+  await page.locator("#sobre-mi").scrollIntoViewIfNeeded();
+  await page.locator("#proyectos .esquema").scrollIntoViewIfNeeded();
+  await page.waitForTimeout(50);
+  if (
+    (await page.evaluate(() => window.__cambiosEsquema.length)) !== 1
+  ) {
+    throw new Error("La secuencia del esquema se repitió al volver a vista");
+  }
+  await page.close();
+
+  const focusPage = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await focusPage.goto(baseUrl, { waitUntil: "networkidle" });
+  await focusPage.evaluate(() => {
+    document.querySelector("#proyectos .proyecto__boton").focus();
+  });
+  const focused = await focusPage.evaluate(() => ({
+    state: document.querySelector("#proyectos .esquema__lista").dataset.esquema,
+    movementClass: document.documentElement.classList.contains("js-movimiento"),
+  }));
+  if (focused.state !== "final" || focused.movementClass) {
+    throw new Error(`Focusin no saltó al estado final: ${JSON.stringify(focused)}`);
+  }
+  await focusPage.close();
+
+  const reducedPage = await browser.newPage({
+    viewport: { width: 640, height: 800 },
+  });
+  await reducedPage.emulateMedia({ reducedMotion: "reduce" });
+  await reducedPage.goto(baseUrl, { waitUntil: "networkidle" });
+  const reduced = await reducedPage.evaluate(() => ({
+    movementClass: document.documentElement.classList.contains("js-movimiento"),
+    state: document.querySelector("#proyectos .esquema__lista").dataset.esquema,
+    opacity: getComputedStyle(
+      document.querySelector("#proyectos .paso__nodo")
+    ).opacity,
+  }));
+  if (reduced.movementClass || reduced.state !== "final" || reduced.opacity !== "1") {
+    throw new Error(`Reduced motion inicial inválido: ${JSON.stringify(reduced)}`);
+  }
+  await reducedPage.close();
+}
+
 async function main() {
-  const artifactDir = "/opt/cursor/artifacts";
+  const artifactDir = ARTIFACT_DIR;
   fs.mkdirSync(artifactDir, { recursive: true });
 
   const contrast = verifyContrast();
@@ -266,6 +497,11 @@ async function main() {
     await runNavInteraction(browser, baseUrl, 375);
     console.log("OK viewport interactivo 375px");
 
+    await assertProjects(browser, baseUrl);
+    console.log("OK contenido, estructura y estados sin JS");
+    await assertProjectMotion(browser, baseUrl);
+    console.log("OK movimiento del esquema y reduced motion");
+
     for (const w of SCREENSHOT_WIDTHS) {
       const shot = await captureReferenceScreenshot(
         browser,
@@ -276,6 +512,14 @@ async function main() {
       screenshotResults.push({ width: w, screenshot: shot });
       console.log(`OK captura referencia ${w}px -> ${shot}`);
     }
+    const reducedShot = await captureReferenceScreenshot(
+      browser,
+      baseUrl,
+      640,
+      artifactDir,
+      true
+    );
+    screenshotResults.push({ width: 640, reducedMotion: true, screenshot: reducedShot });
   } finally {
     await browser.close();
     server.close();

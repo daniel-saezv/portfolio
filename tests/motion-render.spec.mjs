@@ -26,10 +26,11 @@ import {
   guardarGraficoArco,
 } from "./trajectory-overlay.mjs";
 
-const artifactDir = "/opt/cursor/artifacts";
+const artifactDir = path.join(root, "artifacts");
 const STEP_MS = 2000;
 const NAV_FLOW = [
   { href: "#habilidades", id: "habilidades" },
+  { href: "#proyectos", id: "proyectos" },
   { href: "#enlaces", id: "enlaces" },
   { href: "#sobre-mi", id: "sobre-mi" },
 ];

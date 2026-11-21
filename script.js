@@ -157,12 +157,12 @@
         }, retraso);
       };
       if (!broteEnAire) {
-        lanzar();
+        queueMicrotask(lanzar);
         return;
       }
       const tope = setTimeout(() => {
         esperaAire = null;
-        lanzar();
+        queueMicrotask(lanzar);
       }, 400);
       esperaAire = {
         cancelar() {
@@ -172,7 +172,7 @@
         seguir() {
           clearTimeout(tope);
           esperaAire = null;
-          lanzar();
+          queueMicrotask(lanzar);
         },
       };
     }

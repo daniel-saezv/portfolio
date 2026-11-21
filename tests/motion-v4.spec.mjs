@@ -18,12 +18,13 @@ import {
   panelTrayectoria,
 } from "./trajectory-overlay.mjs";
 
-const artifactDir = "/opt/cursor/artifacts/v5";
+const artifactDir = path.join(root, "artifacts", "v5");
 const carrilResultados27 = [];
 const H_MIN = { 390: 18, 1440: 24 };
 const H_MAX = { 390: 54, 1440: 72 };
 const NAV_FLOW = [
   { href: "#habilidades", id: "habilidades" },
+  { href: "#proyectos", id: "proyectos" },
   { href: "#enlaces", id: "enlaces" },
   { href: "#sobre-mi", id: "sobre-mi" },
 ];
@@ -147,7 +148,7 @@ async function instalarFrameLog(page) {
       }
       const textoBloques = [
         ...document.querySelectorAll(
-          "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext"
+          "#sobre-mi p, #habilidades p, #proyectos .proyecto__tipo, #proyectos .proyecto__texto, #proyectos .paso__titulo, #proyectos .paso__detalle, .enlace-ext"
         ),
       ].map((el) => {
         const r = el.getBoundingClientRect();
@@ -1245,7 +1246,7 @@ function curvaOpacidadInicial(frames, tTitulo) {
 }
 
 const SELECTOR_TEXTO =
-  "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext";
+  "#sobre-mi p, #habilidades p, #proyectos .proyecto__tipo, #proyectos .proyecto__texto, #proyectos .paso__titulo, #proyectos .paso__detalle, .enlace-ext";
 
 function contarSolapeTextoEnVuelo(frames, eventos) {
   const saltos = eventos.filter(
@@ -1478,7 +1479,7 @@ async function medirCarrilNav(browser, page, width, height) {
     const xCarril = Math.max(4, xTexto - s - 8);
     const bloques = [
       ...document.querySelectorAll(
-        "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext"
+        "#sobre-mi p, #habilidades p, #proyectos .proyecto__tipo, #proyectos .proyecto__texto, #proyectos .paso__titulo, #proyectos .paso__detalle, .enlace-ext"
       ),
     ].map((el) => {
       const r = el.getBoundingClientRect();
