@@ -1248,7 +1248,7 @@ function curvaOpacidadInicial(frames, tTitulo) {
 const SELECTOR_TEXTO =
   "#sobre-mi p, #habilidades p, #proyectos .proyecto__tipo, #proyectos .proyecto__texto, #proyectos .paso__titulo, #proyectos .paso__detalle, .enlace-ext";
 
-function contarSolapeTextoEnVuelo(frames, eventos) {
+function contarSolapeTextoEnVuelo(frames, eventos, zona) {
   const saltos = eventos.filter(
     (e) => e.nombre === "brote:salto" && e.detail?.n !== 0 && e.detail?.hasta
   );
@@ -1276,8 +1276,8 @@ function contarSolapeTextoEnVuelo(frames, eventos) {
       const brote = f.brote;
       const bl = brote.left;
       const br = bl + brote.width;
-      const bt = brote.top;
-      const bb = bt + brote.height;
+      const bt = Math.max(brote.top, zona.arriba);
+      const bb = Math.min(brote.top + brote.height, zona.abajo);
       for (const b of bloques) {
         const ox = Math.min(br, b.r) - Math.max(bl, b.l);
         const oy = Math.min(bb, b.b) - Math.max(bt, b.t);
@@ -1886,7 +1886,10 @@ async function main() {
       const { frames, ev } = await scrollManualConLog(pScroll, width);
       guardarJson(fname, frames);
       verificarContinuidadScroll(frames, ev, width);
-      const solape = contarSolapeTextoEnVuelo(frames, ev);
+      const solape = contarSolapeTextoEnVuelo(frames, ev, {
+        arriba: width <= 390 ? 56 : 64,
+        abajo: height,
+      });
       guardarJson(`scroll-solape-vuelo-${width}.json`, solape);
       reg(
         26,
