@@ -181,6 +181,9 @@
       if (disparado) return;
       disparado = true;
       ioEsquema?.disconnect();
+      if (seccionProyectos.dataset.entrada !== "final") {
+        finalizarEntrada(seccionProyectos);
+      }
       programarInicio(performance.now());
     }
 
