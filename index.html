@@ -241,7 +241,7 @@
         <h2 class="titulo-seccion" id="t-proyectos">Proyectos</h2>
         <article class="proyecto" aria-labelledby="t-proyecto-plantilla">
           <div class="proyecto__info">
-            <p class="proyecto__tipo">Plantilla de GitHub</p>
+            <span class="proyecto__tipo">Plantilla de GitHub</span>
             <h3 class="proyecto__nombre" id="t-proyecto-plantilla">
               ai-agents-template
             </h3>
@@ -255,13 +255,43 @@
               desde cero.
             </p>
             <a
-              class="boton proyecto__boton"
+              class="boton"
               href="https://github.com/daniel-saezv/ai-agents-template"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Ver en GitHub: repositorio ai-agents-template (se abre en una pestaña nueva)"
-              >Ver en GitHub</a
             >
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle
+                  cx="6.5"
+                  cy="5.5"
+                  r="2.5"
+                  stroke="currentColor"
+                  stroke-width="2"
+                />
+                <circle
+                  cx="6.5"
+                  cy="18.5"
+                  r="2.5"
+                  stroke="currentColor"
+                  stroke-width="2"
+                />
+                <circle
+                  cx="17.5"
+                  cy="8"
+                  r="2.5"
+                  stroke="currentColor"
+                  stroke-width="2"
+                />
+                <path
+                  d="M6.5 8 V16 M17.5 10.5 C17.5 14 13 13.5 8.6 16.8"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <span>Ver en GitHub</span>
+            </a>
           </div>
           <div class="esquema">
             <h4 class="esquema__titulo" id="t-esquema">Cómo funciona</h4>
@@ -272,120 +302,141 @@
               data-esquema="pendiente"
             >
               <li class="paso" style="--paso: 0">
-                <span class="paso__nodo" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
+                <span class="paso__nodo" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" fill="none" focusable="false">
                     <path
-                      d="M12 19 V10 M12 10 C8 10 5.5 7.5 5 4 C9 4 11.5 6.5 12 10 Z M12 13 C16 13 18.5 10.5 19 7 C15 7 12.5 9.5 12 13 Z"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
+                      d="M12 4 C 17 8, 18 14, 12 20 C 6 14, 7 8, 12 4 Z"
+                      fill="rgba(143,214,148,.25)"
+                      stroke="#8FD694"
+                      stroke-width="1.6"
                       stroke-linejoin="round"
                     />
-                  </svg>
-                </span>
-                <span class="paso__contenido">
-                  <strong class="paso__titulo"
-                    >Plantilla<span class="solo-lectores">:</span></strong
-                  >
-                  <span class="paso__detalle"
-                    >Creas tu repositorio a partir de la plantilla.</span
-                  >
-                </span>
+                    <path
+                      d="M12 8 V17"
+                      stroke="#8FD694"
+                      stroke-width="1.4"
+                      stroke-linecap="round"
+                    /></svg></span
+                ><span class="paso__titulo"
+                  >Plantilla<span class="solo-lectores">:</span></span
+                >
+                <span class="paso__detalle"
+                  >Creas tu repositorio a partir de la plantilla.</span
+                >
               </li>
               <li class="paso" style="--paso: 1">
-                <span class="paso__nodo" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
+                <span class="paso__nodo" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" fill="none" focusable="false">
                     <path
-                      d="M6 3 H14 L19 8 V21 H6 Z M14 3 V8 H19 M9 12 H16 M9 16 H14"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
+                      d="M6 3.5 H14.5 L18.5 7.5 V20.5 H6 Z"
+                      fill="rgba(168,240,230,.12)"
+                      stroke="#A8F0E6"
+                      stroke-width="1.6"
                       stroke-linejoin="round"
                     />
-                  </svg>
-                </span>
-                <span class="paso__contenido">
-                  <strong class="paso__titulo"
-                    >Reglas comunes<span class="solo-lectores">:</span></strong
-                  >
-                  <span class="paso__detalle"
-                    >Un único archivo de reglas para los agentes.</span
-                  >
-                </span>
+                    <path
+                      d="M9 11 H15.5 M9 14 H15.5 M9 17 H13"
+                      stroke="#A8F0E6"
+                      stroke-width="1.4"
+                      stroke-linecap="round"
+                    /></svg></span
+                ><span class="paso__titulo"
+                  >Reglas comunes<span class="solo-lectores">:</span></span
+                >
+                <span class="paso__detalle"
+                  >Un único archivo de reglas para los agentes.</span
+                >
               </li>
               <li class="paso" style="--paso: 2">
-                <span class="paso__nodo" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M4 15 C4 11 7 9 10 11 C12 7 17 8 17 12 C21 11 22 17 18 19 H6 C3 19 2 16 4 15 Z"
-                      stroke="currentColor"
-                      stroke-width="1.8"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
+                <span class="paso__nodo" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" fill="none" focusable="false">
+                    <ellipse
+                      cx="8"
+                      cy="15"
+                      rx="4.5"
+                      ry="3.5"
+                      fill="rgba(46,196,182,.3)"
+                      stroke="#2EC4B6"
+                      stroke-width="1.5"
                     />
-                  </svg>
-                </span>
-                <span class="paso__contenido">
-                  <strong class="paso__titulo"
-                    >Skills<span class="solo-lectores">:</span></strong
-                  >
-                  <span class="paso__detalle"
-                    >Instrucciones reutilizables para las tareas habituales.</span
-                  >
-                </span>
+                    <ellipse
+                      cx="16.5"
+                      cy="16"
+                      rx="4"
+                      ry="3"
+                      fill="rgba(242,193,78,.3)"
+                      stroke="#F2C14E"
+                      stroke-width="1.5"
+                    />
+                    <ellipse
+                      cx="12.5"
+                      cy="9"
+                      rx="3.8"
+                      ry="3"
+                      fill="rgba(46,196,182,.3)"
+                      stroke="#2EC4B6"
+                      stroke-width="1.5"
+                    /></svg></span
+                ><span class="paso__titulo"
+                  >Skills<span class="solo-lectores">:</span></span
+                >
+                <span class="paso__detalle"
+                  >Instrucciones reutilizables para las tareas habituales.</span
+                >
               </li>
               <li class="paso" style="--paso: 3">
-                <span class="paso__nodo" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
+                <span class="paso__nodo" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" fill="none" focusable="false">
                     <path
-                      d="M12 20 V9 M12 14 C8 14 5.5 11.5 5 8 C9 8 11.5 10.5 12 14 Z M12 11 C16 11 18.5 8.5 19 5 C15 5 12.5 7.5 12 11 Z M7 20 H17"
-                      stroke="currentColor"
+                      d="M12 21 V12"
+                      stroke="#8FD694"
                       stroke-width="1.8"
                       stroke-linecap="round"
-                      stroke-linejoin="round"
                     />
-                  </svg>
-                </span>
-                <span class="paso__contenido">
-                  <strong class="paso__titulo"
-                    >Configuración autónoma<span class="solo-lectores"
-                      >:</span
-                    ></strong
-                  >
-                  <span class="paso__detalle"
-                    >Un agente explora el proyecto y prepara su entorno desde
-                    cero.</span
-                  >
-                </span>
+                    <path
+                      d="M12 13 C 8 13, 5 10, 5 6 C 9 6, 12 9, 12 13 Z"
+                      fill="#3FA36B"
+                    />
+                    <path
+                      d="M12 11 C 15 11, 19 9, 19 4.5 C 15 4.5, 12 7, 12 11 Z"
+                      fill="#8FD694"
+                    /></svg></span
+                ><span class="paso__titulo"
+                  >Configuración autónoma<span class="solo-lectores"
+                    >:</span
+                  ></span
+                >
+                <span class="paso__detalle"
+                  >Un agente explora el proyecto y prepara su entorno desde
+                  cero.</span
+                >
               </li>
               <li class="paso paso--final" style="--paso: 4">
-                <span class="paso__nodo" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none">
+                <span class="paso__nodo" aria-hidden="true"
+                  ><svg viewBox="0 0 24 24" fill="none" focusable="false">
                     <circle
                       cx="12"
                       cy="12"
-                      r="4"
-                      stroke="currentColor"
-                      stroke-width="1.8"
+                      r="7"
+                      fill="rgba(242,193,78,.2)"
+                      stroke="#F2C14E"
+                      stroke-width="1.6"
                     />
                     <path
-                      d="M12 2 V5 M12 19 V22 M2 12 H5 M19 12 H22 M5 5 L7 7 M17 17 L19 19 M19 5 L17 7 M7 17 L5 19 M9.5 12 L11.5 14 L15 9.5"
-                      stroke="currentColor"
-                      stroke-width="1.8"
+                      d="M8.6 12.2 L11 14.6 L15.6 9.6"
+                      stroke="#F2C14E"
+                      stroke-width="1.9"
+                      fill="none"
                       stroke-linecap="round"
                       stroke-linejoin="round"
-                    />
-                  </svg>
-                </span>
-                <span class="paso__contenido">
-                  <strong class="paso__titulo"
-                    >Entorno listo<span class="solo-lectores">:</span></strong
-                  >
-                  <span class="paso__detalle"
-                    >Cursor y GitHub Copilot arrancan con el entorno preparado,
-                    y CI revisa las skills en cada pull request.</span
-                  >
-                </span>
+                    /></svg></span
+                ><span class="paso__titulo"
+                  >Entorno listo<span class="solo-lectores">:</span></span
+                >
+                <span class="paso__detalle"
+                  >Cursor y GitHub Copilot arrancan con el entorno preparado,
+                  y CI revisa las skills en cada pull request.</span
+                >
               </li>
             </ol>
           </div>

@@ -98,7 +98,7 @@
   function bloquesTextoLinea() {
     return [
       ...document.querySelectorAll(
-        "#sobre-mi p, #habilidades p, #proyectos .proyecto__tipo, #proyectos .proyecto__texto, #proyectos .paso__titulo, #proyectos .paso__detalle, .enlace-ext"
+        "#sobre-mi p, #habilidades p, .habilidad, #proyectos .proyecto__tipo, #proyectos .proyecto__texto, #proyectos .paso__titulo, #proyectos .paso__detalle, .enlace-ext"
       ),
     ];
   }
@@ -420,12 +420,7 @@
       hMin,
       Math.min(0.5 * s + 0.25 * (dist / nS), hCap)
     );
-    const xAdd0 =
-      retarget && origen !== "scroll"
-        ? xAddInicio
-        : saltoSinA
-          ? offsetXAddActual()
-          : 0;
+    const xAdd0 = retarget ? xAddInicio : saltoSinA ? offsetXAddActual() : 0;
     const A = retarget || saltoSinA ? 0 : T.anticipacion;
     saltoSinA = false;
     const llegada = A + nS * T.salto + (nS - 1) * T.contacto;
@@ -456,6 +451,8 @@
       };
     };
     const tSalidaCarril = A + 0.4 * T.salto;
+    // Criterio 26 de motion-v4 (scroll a 390 px hacia Proyectos): al 60 % del
+    // último salto Brote cruza el texto; la vuelta al ancla espera al 99 %.
     const tVueltaCarril =
       A + (nS - 1) * (T.salto + T.contacto) + 0.99 * T.salto;
     const pSalidaCarril = posSaltoFraccion(0, 0.4);
