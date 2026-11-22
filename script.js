@@ -302,6 +302,24 @@
     );
   }
 
+  function continuarPendiente(hasta) {
+    if (!pendiente) return;
+    if (pendiente.hasta === hasta) {
+      cancelarEspera();
+      return;
+    }
+    const espera = Math.max(
+      0,
+      T.quietud - (performance.now() - ultimoScrollT)
+    );
+    clearTimeout(tQuieto);
+    if (espera === 0) {
+      queueMicrotask(lanzarPendiente);
+    } else {
+      tQuieto = setTimeout(lanzarPendiente, espera);
+    }
+  }
+
   const mtx = (el) => new DOMMatrixReadOnly(getComputedStyle(el).transform);
   const ang = (el) => {
     const m = mtx(el);
@@ -752,6 +770,7 @@
       colocar(hasta);
       viajeDestino = null;
       emitir("brote:reposo", { seccion: hasta, origen });
+      continuarPendiente(hasta);
     };
   }
 
@@ -772,6 +791,7 @@
       a2.onfinish = () => {
         colocar(hasta);
         emitir("brote:reposo", { seccion: hasta, origen });
+        continuarPendiente(hasta);
       };
     };
   }
@@ -791,6 +811,7 @@
     const fin = () => {
       colocar(id);
       emitir("brote:reposo", { seccion: id, origen });
+      continuarPendiente(id);
     };
     if (reducido.matches) {
       mascota.style.opacity = "0.01";
@@ -885,6 +906,7 @@
   let acompanandoScroll = false;
   let saltoSinA = false;
   let scrollViajeY = 0;
+  let ultimoScrollT = -Infinity;
 
   function navAlto() {
     return document.querySelector(".nav").offsetHeight;
@@ -908,11 +930,15 @@
     return inter >= 0.5 * s;
   }
 
-  function colocarBajoNav() {
+  function colocarEnBordeVisible(pantY) {
     const s = mascota.offsetWidth;
     const navH = navAlto();
     const p = posDocDesdeCss();
-    fijar({ x: p.x, y: scrollY + navH - s });
+    const top = Math.max(
+      navH - s / 2,
+      Math.min(pantY, innerHeight - s / 2)
+    );
+    fijar({ x: p.x, y: scrollY + top });
   }
 
   function pararAcompanarScroll() {
@@ -924,7 +950,7 @@
   }
 
   function tickAcompanarScroll() {
-    if (!acompanandoScroll || !pendiente || viajando) {
+    if (!acompanandoScroll || viajando) {
       pararAcompanarScroll();
       return;
     }
@@ -943,11 +969,10 @@
   }
 
   function iniciarAcompanarScroll() {
-    if (reducido.matches) return;
-    pararAcompanarScroll();
+    if (reducido.matches || acompanandoScroll) return;
     const r = mascota.getBoundingClientRect();
     if (!visibleEnZona(r.top)) {
-      colocarBajoNav();
+      colocarEnBordeVisible(r.top);
     } else {
       sincDocConPantalla();
     }
@@ -968,8 +993,27 @@
       .forEach((a) => a.setAttribute("aria-current", "true"));
 
     if (origen === "scroll") {
-      cancelarEspera();
-      viajar(desde, id, origen);
+      if (viajando) {
+        pendiente = {
+          desde: viajeDestino || desde,
+          hasta: id,
+          origen,
+          navScroll: false,
+        };
+        clearTimeout(tQuieto);
+        tQuieto = setTimeout(lanzarPendiente, T.quietud);
+        return;
+      }
+      pendiente = {
+        desde: pendiente ? pendiente.desde : desde,
+        hasta: id,
+        origen,
+        navScroll: false,
+      };
+      clearTimeout(tQuieto);
+      clearTimeout(tTope);
+      iniciarAcompanarScroll();
+      tQuieto = setTimeout(lanzarPendiente, T.quietud);
       return;
     }
     if (viajando) {
@@ -996,8 +1040,9 @@
       return;
     }
     const navScroll = origen === "ancla" || origen === "foco";
+    const desdePendiente = pendiente ? pendiente.desde : desde;
     pendiente = {
-      desde: pendiente ? pendiente.desde : desde,
+      desde: desdePendiente,
       hasta: id,
       origen:
         pendiente && pendiente.hasta === id ? pendiente.origen : origen,
@@ -1006,6 +1051,10 @@
     clearTimeout(tQuieto);
     clearTimeout(tTope);
     if (navScroll) iniciarAcompanarScroll();
+    if (navScroll && desdePendiente === id && !reducido.matches) {
+      mascota.classList.add("en-viaje");
+      mascota.dataset.estado = "salto";
+    }
     tQuieto = setTimeout(lanzarPendiente, T.quietud);
     tTope = setTimeout(lanzarPendiente, T.topeEspera);
   }
@@ -1018,15 +1067,22 @@
   }
 
   function lanzarPendiente() {
-    if (!pendiente) return;
+    if (!pendiente) {
+      pararAcompanarScroll();
+      return;
+    }
     const p = pendiente;
+    if (viajando) return;
     cancelarEspera();
-    if (p.hasta !== p.desde || viajando) viajar(p.desde, p.hasta, p.origen);
+    if (p.hasta !== p.desde || p.navScroll || viajando) {
+      viajar(p.desde, p.hasta, p.origen);
+    }
   }
 
   addEventListener(
     "scroll",
     () => {
+      ultimoScrollT = performance.now();
       if (viajando) {
         const delta = scrollY - scrollViajeY;
         if (delta !== 0) {
@@ -1035,23 +1091,33 @@
           scrollViajeY = scrollY;
         }
       }
-      if (pendiente?.navScroll && !viajando) {
-        const delta = scrollY - ultimoScrollY;
-        if (delta !== 0) {
-          const p = posDocDesdeCss();
-          fijar({ x: p.x, y: p.y + delta });
-          ultimoScrollY = scrollY;
+      if (!viajando) {
+        const r = mascota.getBoundingClientRect();
+        if (!visibleEnZona(r.top)) {
+          iniciarAcompanarScroll();
+        }
+        if (acompanandoScroll) {
+          const delta = scrollY - ultimoScrollY;
+          if (delta !== 0) {
+            const p = posDocDesdeCss();
+            fijar({ x: p.x, y: p.y + delta });
+            ultimoScrollY = scrollY;
+          }
         }
       }
-      if (pendiente) {
-        clearTimeout(tQuieto);
-        tQuieto = setTimeout(lanzarPendiente, T.quietud);
-      }
+      clearTimeout(tQuieto);
+      tQuieto = setTimeout(lanzarPendiente, T.quietud);
     },
     { passive: true }
   );
   if ("onscrollend" in window) {
-    addEventListener("scrollend", lanzarPendiente);
+    addEventListener("scrollend", () => {
+      clearTimeout(tQuieto);
+      tQuieto = setTimeout(
+        lanzarPendiente,
+        Math.max(0, T.quietud - (performance.now() - ultimoScrollT))
+      );
+    });
   }
 
   enlacesNav.forEach((a) => {

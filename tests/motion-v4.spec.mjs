@@ -1346,7 +1346,7 @@ function registrarC20(result, suffix = "") {
   const a = result;
   const pass =
     a.ok &&
-    a.deltaOpacity <= 17.5 &&
+    a.deltaFrames <= 1 &&
     a.dtReposo <= 520 &&
     a.sinSalto &&
     a.seccion ===
@@ -1427,6 +1427,18 @@ async function criterio15(page, width, href, sectionId, rapid = false) {
     }
   }
   const { arcs, n } = medirArcosSaltos(fly, salto, { aterrizajeT: aterri?.t });
+  if (!arcs.length && salto) {
+    fail(
+      `${width}px C15: sin arco tras salto ${salto.detail.hasta}; salto=${JSON.stringify(
+        salto
+      )} aterrizaje=${JSON.stringify(aterri)} frames=${frames
+        .filter(
+          (f) => salto && f.t >= salto.t - 16 && f.t <= salto.t + 1200
+        )
+        .map((f) => `${f.estado}@${Math.round(f.t - salto.t)}`)
+        .join(",")}`
+    );
+  }
   assertArcoEnSpec(arcs, hMin, hMax, `${width}px C15`, n);
   if (maxStep > 2.05) {
     fail(`${width}px C15 maxΔscroll=${maxStep.toFixed(2)}px`);
@@ -1552,6 +1564,46 @@ async function scrollManualConLog(page, width) {
   });
   const ev = await page.evaluate(() => window.__eventos);
   return { frames, ev };
+}
+
+function verificarContinuidadScroll(frames, ev, width) {
+  const height = width === 390 ? 844 : 900;
+  const navH = width <= 390 ? 56 : 64;
+  const saltos = ev.filter(
+    (e) => e.nombre === "brote:salto" && e.detail?.origen === "scroll"
+  );
+  if (!saltos.length) fail(`${width}px scroll continuo: sin saltos registrados`);
+
+  for (const salto of saltos) {
+    const idx = frames.findIndex(
+      (f) => f.t >= salto.t - 1 && f.estado === "salto"
+    );
+    if (idx <= 0) fail(`${width}px scroll continuo: falta el inicio del salto`);
+    const previo = frames[idx - 1];
+    const inicio = frames[idx];
+    const s = inicio.brote.width;
+    const visible =
+      Math.min(inicio.top + s, height) - Math.max(inicio.top, navH);
+    const desplazamiento = Math.hypot(
+      inicio.left - previo.left,
+      inicio.top - previo.top
+    );
+    if (visible < 0.5 * s) {
+      fail(
+        `${width}px scroll continuo: salto ${salto.detail.hasta} empieza fuera de vista (${visible.toFixed(1)}px visibles)`
+      );
+    }
+    if (desplazamiento > 8) {
+      fail(
+        `${width}px scroll continuo: teletransporte de ${desplazamiento.toFixed(1)}px al iniciar ${salto.detail.hasta}`
+      );
+    }
+    if (salto.detail.retarget) {
+      fail(
+        `${width}px scroll continuo: salto ${salto.detail.hasta} canceló otro salto`
+      );
+    }
+  }
 }
 
 function duracionVideoSeg(ruta) {
@@ -1708,7 +1760,7 @@ async function main() {
     });
     const passRm =
       r20Rm.ok &&
-      r20Rm.deltaOpacity <= 17.5 &&
+      r20Rm.deltaFrames <= 1 &&
       r20Rm.dtReposo <= 520 &&
       r20Rm.sinSalto;
     const detRm = `390px C20 RM: Δopac=${r20Rm.deltaOpacity?.toFixed(1)}ms (Δframes=${r20Rm.deltaFrames}) Δreposo=${r20Rm.dtReposo?.toFixed(0)}ms sin salto`;
@@ -1833,6 +1885,7 @@ async function main() {
       await waitAparicionInicial(pScroll);
       const { frames, ev } = await scrollManualConLog(pScroll, width);
       guardarJson(fname, frames);
+      verificarContinuidadScroll(frames, ev, width);
       const solape = contarSolapeTextoEnVuelo(frames, ev);
       guardarJson(`scroll-solape-vuelo-${width}.json`, solape);
       reg(
