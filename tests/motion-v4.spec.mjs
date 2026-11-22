@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import {
   startServer,
@@ -18,12 +19,14 @@ import {
   panelTrayectoria,
 } from "./trajectory-overlay.mjs";
 
-const artifactDir = "/opt/cursor/artifacts/v5";
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const artifactDir = path.join(root, "artifacts", "v5");
 const carrilResultados27 = [];
 const H_MIN = { 390: 18, 1440: 24 };
 const H_MAX = { 390: 54, 1440: 72 };
 const NAV_FLOW = [
   { href: "#habilidades", id: "habilidades" },
+  { href: "#proyectos", id: "proyectos" },
   { href: "#enlaces", id: "enlaces" },
   { href: "#sobre-mi", id: "sobre-mi" },
 ];
@@ -147,7 +150,7 @@ async function instalarFrameLog(page) {
       }
       const textoBloques = [
         ...document.querySelectorAll(
-          "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext"
+          "#sobre-mi p, #habilidades p, #proyectos .proyecto__tipo, #proyectos .proyecto__texto, #proyectos .paso__titulo, #proyectos .paso__detalle, .enlace-ext"
         ),
       ].map((el) => {
         const r = el.getBoundingClientRect();
@@ -737,10 +740,8 @@ function detalleRetargetSalidaOFalla(rS, width) {
 async function prepararViajeCarril(page, baseUrl, width) {
   await page.goto(baseUrl, { waitUntil: "networkidle" });
   await waitAparicionInicial(page);
-  if (width === 390) {
-    await page.click('nav a[href="#habilidades"]');
-    await waitReposoEnSeccion(page, "habilidades", 12000);
-  }
+  await page.click('nav a[href="#habilidades"]');
+  await waitReposoEnSeccion(page, "habilidades", 12000);
 }
 
 async function esperarFaseSalto(page, fase, hasta = null) {
@@ -1245,7 +1246,7 @@ function curvaOpacidadInicial(frames, tTitulo) {
 }
 
 const SELECTOR_TEXTO =
-  "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext";
+  "#sobre-mi p, #habilidades p, #proyectos .proyecto__tipo, #proyectos .proyecto__texto, #proyectos .paso__titulo, #proyectos .paso__detalle, .enlace-ext";
 
 function contarSolapeTextoEnVuelo(frames, eventos) {
   const saltos = eventos.filter(
@@ -1478,7 +1479,7 @@ async function medirCarrilNav(browser, page, width, height) {
     const xCarril = Math.max(4, xTexto - s - 8);
     const bloques = [
       ...document.querySelectorAll(
-        "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext"
+        "#sobre-mi p, #habilidades p, #proyectos .proyecto__tipo, #proyectos .proyecto__texto, #proyectos .paso__titulo, #proyectos .paso__detalle, .enlace-ext"
       ),
     ].map((el) => {
       const r = el.getBoundingClientRect();
@@ -1555,8 +1556,17 @@ async function scrollManualConLog(page, width) {
 
 function duracionVideoSeg(ruta) {
   try {
-    const out = execSync(
-      `ffprobe -v error -show_entries format=duration -of default=nk=1:nw=1 "${ruta}"`,
+    const out = execFileSync(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=nk=1:nw=1",
+        ruta,
+      ],
       { encoding: "utf8" }
     );
     return parseFloat(out.trim());
@@ -1607,13 +1617,49 @@ async function grabarDemoCompleta(browser, baseUrl, width, height, name) {
   const mp4 = path.join(artifactDir, name);
   const fps = 60;
   try {
-    execSync(
-      `ffmpeg -y -i "${webm}" -vf "fps=${fps}" -r ${fps} -c:v libx264 -pix_fmt yuv420p -crf 22 -movflags +faststart "${mp4}"`,
+    execFileSync(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        webm,
+        "-vf",
+        `fps=${fps}`,
+        "-r",
+        String(fps),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-crf",
+        "22",
+        "-movflags",
+        "+faststart",
+        mp4,
+      ],
       { stdio: "pipe" }
     );
   } catch {
-    execSync(
-      `ffmpeg -y -i "${webm}" -vf "fps=30" -r 30 -c:v libx264 -pix_fmt yuv420p -crf 22 -movflags +faststart "${mp4}"`,
+    execFileSync(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        webm,
+        "-vf",
+        "fps=30",
+        "-r",
+        "30",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-crf",
+        "22",
+        "-movflags",
+        "+faststart",
+        mp4,
+      ],
       { stdio: "pipe" }
     );
   }
@@ -1761,6 +1807,11 @@ async function main() {
         26,
         carril.violaciones === 0,
         `${width}px solape texto: xTexto=${carril.xTexto.toFixed(1)} xCarril=${carril.xCarril.toFixed(1)} violaciones=${carril.violaciones}`
+      );
+      await page.waitForFunction(
+        () => document.getElementById("mascota").dataset.estado === "reposo",
+        null,
+        { timeout: 8000 }
       );
       const reposo = await assertReposoRenderizado(page, "enlaces");
       reg(
