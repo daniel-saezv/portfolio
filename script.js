@@ -814,10 +814,10 @@
       continuarPendiente(id);
     };
     if (reducido.matches) {
-      mascota.style.opacity = "0.02";
+      mascota.style.opacity = "0.01";
       anims = [
         mascota.animate(
-          [{ opacity: 0.02 }, { opacity: 1 }],
+          [{ opacity: 0.01 }, { opacity: 1 }],
           {
             duration: T.rmEntrada,
             easing: E.desacel,
@@ -849,7 +849,7 @@
     anims = [
       mascota.animate(
         [
-          { opacity: 0.02, easing: E.desacel },
+          { opacity: 0.01, easing: E.desacel },
           { offset: off(T.aparicionOpacidad), opacity: 1 },
           { opacity: 1 },
         ],
