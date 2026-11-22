@@ -1554,6 +1554,46 @@ async function scrollManualConLog(page, width) {
   return { frames, ev };
 }
 
+function verificarContinuidadScroll(frames, ev, width) {
+  const height = width === 390 ? 844 : 900;
+  const navH = width <= 390 ? 56 : 64;
+  const saltos = ev.filter(
+    (e) => e.nombre === "brote:salto" && e.detail?.origen === "scroll"
+  );
+  if (!saltos.length) fail(`${width}px scroll continuo: sin saltos registrados`);
+
+  for (const salto of saltos) {
+    const idx = frames.findIndex(
+      (f) => f.t >= salto.t - 1 && f.estado === "salto"
+    );
+    if (idx <= 0) fail(`${width}px scroll continuo: falta el inicio del salto`);
+    const previo = frames[idx - 1];
+    const inicio = frames[idx];
+    const s = inicio.brote.width;
+    const visible =
+      Math.min(inicio.top + s, height) - Math.max(inicio.top, navH);
+    const desplazamiento = Math.hypot(
+      inicio.left - previo.left,
+      inicio.top - previo.top
+    );
+    if (visible < 0.5 * s) {
+      fail(
+        `${width}px scroll continuo: salto ${salto.detail.hasta} empieza fuera de vista (${visible.toFixed(1)}px visibles)`
+      );
+    }
+    if (desplazamiento > 8) {
+      fail(
+        `${width}px scroll continuo: teletransporte de ${desplazamiento.toFixed(1)}px al iniciar ${salto.detail.hasta}`
+      );
+    }
+    if (salto.detail.retarget) {
+      fail(
+        `${width}px scroll continuo: salto ${salto.detail.hasta} canceló otro salto`
+      );
+    }
+  }
+}
+
 function duracionVideoSeg(ruta) {
   try {
     const out = execFileSync(
@@ -1833,6 +1873,7 @@ async function main() {
       await waitAparicionInicial(pScroll);
       const { frames, ev } = await scrollManualConLog(pScroll, width);
       guardarJson(fname, frames);
+      verificarContinuidadScroll(frames, ev, width);
       const solape = contarSolapeTextoEnVuelo(frames, ev);
       guardarJson(`scroll-solape-vuelo-${width}.json`, solape);
       reg(
