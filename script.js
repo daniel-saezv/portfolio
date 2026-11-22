@@ -814,10 +814,10 @@
       continuarPendiente(id);
     };
     if (reducido.matches) {
-      mascota.style.opacity = "0.01";
+      mascota.style.opacity = "0.02";
       anims = [
         mascota.animate(
-          [{ opacity: 0.01 }, { opacity: 1 }],
+          [{ opacity: 0.02 }, { opacity: 1 }],
           {
             duration: T.rmEntrada,
             easing: E.desacel,
@@ -849,7 +849,7 @@
     anims = [
       mascota.animate(
         [
-          { opacity: 0.01, easing: E.desacel },
+          { opacity: 0.02, easing: E.desacel },
           { offset: off(T.aparicionOpacidad), opacity: 1 },
           { opacity: 1 },
         ],
@@ -1040,8 +1040,9 @@
       return;
     }
     const navScroll = origen === "ancla" || origen === "foco";
+    const desdePendiente = pendiente ? pendiente.desde : desde;
     pendiente = {
-      desde: pendiente ? pendiente.desde : desde,
+      desde: desdePendiente,
       hasta: id,
       origen:
         pendiente && pendiente.hasta === id ? pendiente.origen : origen,
@@ -1050,6 +1051,10 @@
     clearTimeout(tQuieto);
     clearTimeout(tTope);
     if (navScroll) iniciarAcompanarScroll();
+    if (navScroll && desdePendiente === id && !reducido.matches) {
+      mascota.classList.add("en-viaje");
+      mascota.dataset.estado = "salto";
+    }
     tQuieto = setTimeout(lanzarPendiente, T.quietud);
     tTope = setTimeout(lanzarPendiente, T.topeEspera);
   }
@@ -1069,7 +1074,9 @@
     const p = pendiente;
     if (viajando) return;
     cancelarEspera();
-    if (p.hasta !== p.desde || viajando) viajar(p.desde, p.hasta, p.origen);
+    if (p.hasta !== p.desde || p.navScroll || viajando) {
+      viajar(p.desde, p.hasta, p.origen);
+    }
   }
 
   addEventListener(
@@ -1088,7 +1095,8 @@
         const r = mascota.getBoundingClientRect();
         if (!visibleEnZona(r.top)) {
           iniciarAcompanarScroll();
-        } else if (acompanandoScroll) {
+        }
+        if (acompanandoScroll) {
           const delta = scrollY - ultimoScrollY;
           if (delta !== 0) {
             const p = posDocDesdeCss();

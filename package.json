@@ -17,6 +17,6 @@
   },
   "homepage": "https://github.com/daniel-saezv/portfolio#readme",
   "devDependencies": {
-    "playwright": "^1.49.0"
+    "playwright": "^1.65.1"
   }
 }
