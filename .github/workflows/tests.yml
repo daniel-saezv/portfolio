@@ -22,3 +22,13 @@ jobs:
 
       - name: Ejecutar Playwright
         run: npm test
+
+      - name: Subir capturas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas
+          path: |
+            artifacts/proyectos-*.png
+            artifacts/**/*.png
+          if-no-files-found: warn

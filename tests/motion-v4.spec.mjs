@@ -1808,6 +1808,11 @@ async function main() {
         carril.violaciones === 0,
         `${width}px solape texto: xTexto=${carril.xTexto.toFixed(1)} xCarril=${carril.xCarril.toFixed(1)} violaciones=${carril.violaciones}`
       );
+      await page.waitForFunction(
+        () => document.getElementById("mascota").dataset.estado === "reposo",
+        null,
+        { timeout: 8000 }
+      );
       const reposo = await assertReposoRenderizado(page, "enlaces");
       reg(
         2,
