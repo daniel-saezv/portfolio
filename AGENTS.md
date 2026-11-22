@@ -89,3 +89,7 @@ No hay paso de build del sitio.
 1. Preparar el entorno: `bash scripts/setup` (`.cursor/environment.json` lo invoca en el Build).
 2. Ejecutar `npm test` desde la raíz del repositorio.
 3. No se requieren secretos para pruebas locales; el despliegue usa `GITHUB_TOKEN` / permisos de Pages del repositorio.
+
+### Configuración que solo puede hacer el dueño del repo
+
+- Activar **GitHub Pages** (*Settings → Pages → Source: GitHub Actions*) exige permisos `pages=write` y `administration=write`. Ninguna credencial de los agentes los tiene: la conexión de Cursor limita `pages` y `administration` a lectura. Hay que hacerlo a mano una vez por repositorio.
