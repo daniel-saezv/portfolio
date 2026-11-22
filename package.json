@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "node tests/portfolio.spec.mjs && node tests/motion.spec.mjs && node tests/motion-render.spec.mjs && node tests/motion-v4.spec.mjs"
+    "test": "node tests/portfolio.spec.mjs && node tests/motion-smoke.spec.mjs"
   },
   "repository": {
     "type": "git",
