@@ -472,12 +472,8 @@
       };
     };
     const tSalidaCarril = A + 0.4 * T.salto;
-    // Criterio 26 de motion-v4 (scroll a 390 px hacia Proyectos): al 60 % del
-    // último salto Brote cruza el texto; la vuelta al ancla espera al 99 %.
     const tVueltaCarril =
-      A + (nS - 1) * (T.salto + T.contacto) + 0.99 * T.salto;
-    const pSalidaCarril = posSaltoFraccion(0, 0.4);
-    const pVueltaCarril = posSaltoFraccion(nS - 1, 0.99);
+      A + (nS - 1) * (T.salto + T.contacto) + 0.6 * T.salto;
 
     const kV = [{ offset: 0, transform: tr(o), easing: E.cuerda }];
     const kArc = [{ offset: 0, transform: "translateY(0px)", easing: E.cuerda }];
@@ -616,34 +612,20 @@
         { offset: 1, transform: "translateX(0px)" }
       );
     } else {
-      const margenDesde =
-        origen === "scroll" || enCarrilAhora
-          ? off(Math.max(A, 0))
-          : offSalida;
-      if (origen === "scroll" || enCarrilAhora) {
-        if (enCarrilAhora) {
-          kX[0].transform = `translateX(${snapLaneAddV()}px)`;
-          for (const kf of kV) {
-            if (kf.offset <= margenDesde + 1e-6) continue;
-            if (kf.offset >= offVuelta - 1e-6) break;
-            addKx(kf.offset, docX(kf.transform), kf.easing);
-          }
-        } else {
-          const k0 = docX(kV[0].transform);
-          kX[0].transform = `translateX(${xAdd0 + xLane - k0}px)`;
-          addKx(
-            margenDesde,
-            docX(
-              kV.find((k) => k.offset >= margenDesde - 1e-6)?.transform ||
-                kV[0].transform
-            ),
-            E.cuerda
-          );
-          for (const kf of kV) {
-            if (kf.offset <= margenDesde + 1e-6) continue;
-            if (kf.offset >= offVuelta - 1e-6) break;
-            addKx(kf.offset, docX(kf.transform), kf.easing);
-          }
+      if (enCarrilAhora) {
+        kX[0].transform = `translateX(${snapLaneAddV()}px)`;
+        for (const kf of kV) {
+          if (kf.offset <= off(A) + 1e-6) continue;
+          if (kf.offset >= offVuelta - 1e-6) break;
+          addKx(kf.offset, docX(kf.transform), kf.easing);
+        }
+      } else if (origen === "scroll") {
+        kX[0].easing = E.cuerda;
+        addKx(off(A), docX(tr(o)), E.cuerda);
+        for (const kf of kV) {
+          if (kf.offset <= off(A) + 1e-6) continue;
+          if (kf.offset >= offVuelta - 1e-6) break;
+          addKx(kf.offset, docX(kf.transform), kf.easing);
         }
       } else {
         addKx(offSalida, docX(tr(posSaltoFraccion(0, 0.4))), E.cuerda);
@@ -1073,6 +1055,11 @@
     }
     const p = pendiente;
     if (viajando) return;
+    if (p.origen === "scroll" && candidata !== null) {
+      clearTimeout(tQuieto);
+      tQuieto = setTimeout(lanzarPendiente, T.debounceScroll);
+      return;
+    }
     cancelarEspera();
     if (p.hasta !== p.desde || p.navScroll || viajando) {
       viajar(p.desde, p.hasta, p.origen);
