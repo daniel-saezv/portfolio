@@ -30,7 +30,7 @@ Con el entorno preparado, ejecuta la suite:
 npm test
 ```
 
-El script `test` de `package.json` ejecuta `tests/portfolio.spec.mjs` y `tests/motion-smoke.spec.mjs`. La prueba de movimiento comprueba la navegación en móvil y escritorio, el movimiento reducido y la continuidad lateral: muestrea la posición renderizada cada 4 ms, limita la velocidad a 1 px/ms y verifica el carril y el regreso sin cruzar texto.
+El script `test` de `package.json` ejecuta, en este orden, `tests/portfolio.spec.mjs`, `tests/motion.spec.mjs` y `tests/motion-render.spec.mjs`.
 
 ## Estructura
 

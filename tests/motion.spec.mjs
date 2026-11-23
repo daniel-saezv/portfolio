@@ -70,7 +70,6 @@ async function setupEventLog(page) {
 const NAV_LINKS = [
   { href: "#sobre-mi", id: "sobre-mi" },
   { href: "#habilidades", id: "habilidades" },
-  { href: "#proyectos", id: "proyectos" },
   { href: "#enlaces", id: "enlaces" },
 ];
 
@@ -140,7 +139,7 @@ function registro(id, ok, verificacion) {
 async function main() {
   const { server, baseUrl } = await startServer();
   const browser = await chromium.launch();
-  const artifactDir = path.join(root, "artifacts");
+  const artifactDir = "/opt/cursor/artifacts";
   fs.mkdirSync(artifactDir, { recursive: true });
 
   try {
