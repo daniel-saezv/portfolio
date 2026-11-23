@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Daniel Saez · Portfolio</title>
+    <meta
+      name="description"
+      content="Daniel Saez: backend en .NET, front-end en Angular, arquitectura técnica y producto."
+    />
+    <meta name="theme-color" content="#0B2A22" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Nunito:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <script>
+      document.documentElement.classList.add("js");
+    </script>
+
+    <div class="hojas hojas--izq" aria-hidden="true">
+      <svg class="h-arriba" viewBox="0 0 260 360" fill="none">
+        <g fill="#3FA36B" opacity=".55">
+          <path
+            d="M-10 40 C 60 30, 130 60, 170 120 C 110 120, 40 95, -10 40 Z"
+          />
+          <path
+            d="M-10 140 C 50 120, 120 140, 150 200 C 90 205, 30 185, -10 140 Z"
+          />
+          <path
+            d="M-10 250 C 40 235, 95 255, 115 300 C 65 305, 20 290, -10 250 Z"
+          />
+        </g>
+        <g fill="#14453A">
+          <path
+            d="M-20 -10 C 70 -20, 170 10, 230 80 C 150 90, 50 60, -20 -10 Z"
+          />
+          <path
+            d="M-20 80 C 40 70, 90 90, 120 140 C 70 145, 20 125, -20 80 Z"
+            opacity=".9"
+          />
+        </g>
+        <path
+          d="M-10 40 C 60 50, 120 80, 165 118 M-10 140 C 45 145, 100 165, 148 198"
+          stroke="#8FD694"
+          stroke-opacity=".25"
+          stroke-width="1.5"
+        />
+      </svg>
+      <svg class="h-abajo" viewBox="0 0 260 360" fill="none">
+        <g fill="#3FA36B" opacity=".45">
+          <path
+            d="M-10 60 C 70 40, 150 80, 200 150 C 120 150, 40 120, -10 60 Z"
+          />
+          <path
+            d="M-10 190 C 45 175, 105 195, 135 245 C 80 250, 25 230, -10 190 Z"
+          />
+        </g>
+        <path
+          d="M-10 60 C 70 70, 140 105, 196 148"
+          stroke="#8FD694"
+          stroke-opacity=".25"
+          stroke-width="1.5"
+        />
+      </svg>
+    </div>
+    <div class="hojas hojas--der" aria-hidden="true">
+      <svg class="h-arriba" viewBox="0 0 260 360" fill="none">
+        <g fill="#3FA36B" opacity=".5">
+          <path
+            d="M-10 90 C 60 70, 140 100, 185 170 C 110 175, 40 145, -10 90 Z"
+          />
+          <path
+            d="M-10 210 C 45 195, 100 215, 125 265 C 70 270, 20 250, -10 210 Z"
+          />
+        </g>
+        <g fill="#14453A">
+          <path
+            d="M-20 10 C 60 0, 140 30, 190 90 C 120 95, 40 70, -20 10 Z"
+          />
+        </g>
+        <path
+          d="M-10 90 C 60 100, 130 130, 180 168"
+          stroke="#8FD694"
+          stroke-opacity=".25"
+          stroke-width="1.5"
+        />
+      </svg>
+      <svg class="h-abajo" viewBox="0 0 260 360" fill="none">
+        <g fill="#3FA36B" opacity=".45">
+          <path
+            d="M-10 80 C 60 60, 140 95, 180 160 C 110 165, 35 135, -10 80 Z"
+          />
+        </g>
+      </svg>
+    </div>
+
+    <header class="nav">
+      <nav class="nav__interior" aria-label="Secciones">
+        <span class="nav__nombre">Daniel Saez</span>
+        <ul class="nav__lista">
+          <li>
+            <a class="nav__enlace" href="#sobre-mi" data-destino="sobre-mi"
+              >Sobre mí</a
+            >
+          </li>
+          <li>
+            <a class="nav__enlace" href="#habilidades" data-destino="habilidades"
+              >Habilidades</a
+            >
+          </li>
+          <li>
+            <a class="nav__enlace" href="#enlaces" data-destino="enlaces"
+              >Enlaces</a
+            >
+          </li>
+        </ul>
+      </nav>
+    </header>
+
+    <main id="contenido">
+      <section
+        class="seccion sobre"
+        id="sobre-mi"
+        data-seccion
+        data-entrada="inicial"
+        aria-labelledby="t-sobre"
+        tabindex="-1"
+      >
+        <h1 class="titulo-seccion" id="t-sobre">Daniel Saez</h1>
+        <p class="antetitulo">Sobre mí</p>
+        <div class="sobre__texto">
+          <p>
+            Soy una persona muy curiosa e inquieta: me gusta entender cómo
+            funcionan las cosas por dentro y no me quedo quieto hasta conseguirlo.
+          </p>
+          <p>
+            Cuando me marco un objetivo, siempre encuentro la forma de llegar a
+            él.
+          </p>
+        </div>
+      </section>
+
+      <div class="separador" aria-hidden="true">
+        <svg viewBox="0 0 480 24" preserveAspectRatio="none" fill="none">
+          <path
+            d="M0 12 C 40 2, 80 2, 120 12 S 200 22, 240 12 S 320 2, 360 12 S 440 22, 480 12"
+            stroke="#2EC4B6"
+            stroke-opacity=".45"
+            stroke-width="1.5"
+            vector-effect="non-scaling-stroke"
+          />
+          <path
+            d="M0 17 C 40 9, 80 9, 120 17 S 200 25, 240 17 S 320 9, 360 17 S 440 25, 480 17"
+            stroke="#A8F0E6"
+            stroke-opacity=".18"
+            stroke-width="1"
+            vector-effect="non-scaling-stroke"
+          />
+        </svg>
+      </div>
+
+      <section
+        class="seccion habilidades"
+        id="habilidades"
+        data-seccion
+        data-entrada="inicial"
+        aria-labelledby="t-habilidades"
+        tabindex="-1"
+      >
+        <h2 class="titulo-seccion" id="t-habilidades">Habilidades</h2>
+        <div class="rasgo">
+          <svg
+            class="rasgo__icono"
+            viewBox="0 0 32 32"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M16 3 L19 12.5 L29 13 L21 19 L24 29 L16 23 L8 29 L11 19 L3 13 L13 12.5 Z"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linejoin="round"
+              fill="rgba(242,193,78,.2)"
+            />
+          </svg>
+          <p>
+            <span class="rasgo__etiqueta">Rasgo principal</span>
+            <span class="rasgo__texto"
+              >Preparación y organización de desarrollos y releases en un equipo
+              de producto.</span
+            >
+          </p>
+        </div>
+        <ul class="piedras" aria-label="Habilidades por orden de peso">
+          <li class="piedra piedra--principal">
+            Backend en .NET <span class="piedra__etiqueta">Principal</span>
+          </li>
+          <li class="piedra">Front-end en Angular</li>
+          <li class="piedra">Diseño de arquitecturas técnicas</li>
+          <li class="piedra">Participación en decisiones de producto</li>
+        </ul>
+      </section>
+
+      <div class="separador" aria-hidden="true">
+        <svg viewBox="0 0 480 24" preserveAspectRatio="none" fill="none">
+          <path
+            d="M0 12 C 40 22, 80 22, 120 12 S 200 2, 240 12 S 320 22, 360 12 S 440 2, 480 12"
+            stroke="#2EC4B6"
+            stroke-opacity=".45"
+            stroke-width="1.5"
+            vector-effect="non-scaling-stroke"
+          />
+          <path
+            d="M0 7 C 40 15, 80 15, 120 7 S 200 -1, 240 7 S 320 15, 360 7 S 440 -1, 480 7"
+            stroke="#A8F0E6"
+            stroke-opacity=".18"
+            stroke-width="1"
+            vector-effect="non-scaling-stroke"
+          />
+        </svg>
+      </div>
+
+      <section
+        class="seccion enlaces"
+        id="enlaces"
+        data-seccion
+        data-entrada="inicial"
+        aria-labelledby="t-enlaces"
+        tabindex="-1"
+      >
+        <h2 class="titulo-seccion" id="t-enlaces">Enlaces</h2>
+        <p class="enlaces__intro">Dónde encontrarme.</p>
+        <div class="botones">
+          <a
+            class="boton"
+            href="https://www.linkedin.com/in/daniel-saez-vilarrubia-667737206/"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect
+                x="2.5"
+                y="2.5"
+                width="19"
+                height="19"
+                rx="4.5"
+                stroke="currentColor"
+                stroke-width="2"
+              />
+              <circle cx="8" cy="7.8" r="1.4" fill="currentColor" />
+              <path
+                d="M8 10.8 V17 M12 17 V10.8 M12 13.6 C12 11.6 16.5 10.6 16.5 13.8 V17"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+            <span>LinkedIn</span
+            ><span class="solo-lectores"> (se abre en una pestaña nueva)</span>
+          </a>
+          <a
+            class="boton"
+            href="https://github.com/daniel-saezv"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <circle cx="6.5" cy="5.5" r="2.5" stroke="currentColor" stroke-width="2" />
+              <circle cx="6.5" cy="18.5" r="2.5" stroke="currentColor" stroke-width="2" />
+              <circle cx="17.5" cy="8" r="2.5" stroke="currentColor" stroke-width="2" />
+              <path
+                d="M6.5 8 V16 M17.5 10.5 C17.5 14 13 13.5 8.6 16.8"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
+            <span>GitHub</span
+            ><span class="solo-lectores"> (se abre en una pestaña nueva)</span>
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="pie">
+      <p>© <span id="anio">2026</span> Daniel Saez</p>
+    </footer>
+
+    <div id="mascota" class="brote" data-estado="reposo" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" focusable="false">
+        <defs>
+          <radialGradient id="brote-brillo-barriga" cx="50%" cy="45%" r="60%">
+            <stop offset="0" stop-color="#FFFFFF" stop-opacity=".55" />
+            <stop offset=".55" stop-color="#A8F0E6" stop-opacity="1" />
+            <stop offset="1" stop-color="#A8F0E6" stop-opacity=".85" />
+          </radialGradient>
+        </defs>
+        <g id="brote-hoja-izq" style="transform-box: view-box; transform-origin: 32px 20px">
+          <path
+            d="M32 20 C 27 18, 19 15, 16 7 C 24 6, 30 11, 32 20 Z"
+            fill="#3FA36B"
+          />
+          <path
+            d="M32 20 C 27 15, 22 11, 18 8.5"
+            fill="none"
+            stroke="#8FD694"
+            stroke-width="1"
+            stroke-linecap="round"
+            opacity=".7"
+          />
+        </g>
+        <g id="brote-hoja-der" style="transform-box: view-box; transform-origin: 32px 20px">
+          <path
+            d="M32 20 C 35 17, 41 12, 49 12 C 46 19, 39 21, 32 20 Z"
+            fill="#3FA36B"
+          />
+          <path
+            d="M32 20 C 37 17, 42 14, 47 13"
+            fill="none"
+            stroke="#8FD694"
+            stroke-width="1"
+            stroke-linecap="round"
+            opacity=".7"
+          />
+        </g>
+        <g id="brote-cuerpo">
+          <path
+            d="M32 19 C 46 19, 54 29, 54 40 C 54 52, 44 60, 32 60 C 20 60, 10 52, 10 40 C 10 29, 18 19, 32 19 Z"
+            fill="#8FD694"
+          />
+          <path
+            d="M17 33 C 19 26, 24 22, 30 21.5"
+            fill="none"
+            stroke="#FFFFFF"
+            stroke-width="2"
+            stroke-linecap="round"
+            opacity=".35"
+          />
+        </g>
+        <g id="brote-barriga">
+          <ellipse cx="32" cy="50" rx="10.5" ry="7.5" fill="url(#brote-brillo-barriga)" />
+        </g>
+        <g id="brote-ojos">
+          <g id="brote-ojo-izq">
+            <ellipse cx="24.5" cy="36" rx="4" ry="4.8" fill="#0B2A22" />
+            <circle cx="26" cy="34.2" r="1.6" fill="#FFFFFF" />
+            <circle cx="23.4" cy="38" r=".7" fill="#FFFFFF" opacity=".8" />
+          </g>
+          <g id="brote-ojo-der">
+            <ellipse cx="39.5" cy="36" rx="4" ry="4.8" fill="#0B2A22" />
+            <circle cx="41" cy="34.2" r="1.6" fill="#FFFFFF" />
+            <circle cx="38.4" cy="38" r=".7" fill="#FFFFFF" opacity=".8" />
+          </g>
+        </g>
+        <g id="brote-mejillas" fill="#F2C14E" opacity=".85">
+          <ellipse cx="18.5" cy="42.5" rx="3.2" ry="2" />
+          <ellipse cx="45.5" cy="42.5" rx="3.2" ry="2" />
+        </g>
+      </svg>
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>
