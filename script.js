@@ -12,10 +12,6 @@
   const hojaI = document.getElementById("brote-hoja-izq");
   const hojaD = document.getElementById("brote-hoja-der");
   const reducido = matchMedia("(prefers-reduced-motion: reduce)");
-  const seccionProyectos = document.getElementById("proyectos");
-  const esquema = document.querySelector("#proyectos .esquema");
-  const listaEsquema = document.querySelector("#proyectos .esquema__lista");
-  let registrarEntradaEsquema = () => {};
 
   if (anio) {
     anio.textContent = String(new Date().getFullYear());
@@ -98,127 +94,10 @@
   function bloquesTextoLinea() {
     return [
       ...document.querySelectorAll(
-        "#sobre-mi p, #habilidades p, .habilidad, #proyectos .proyecto__tipo, #proyectos .proyecto__texto, #proyectos .paso__titulo, #proyectos .paso__detalle, .enlace-ext"
+        "#sobre-mi p, #habilidades p, .habilidad, .enlace-ext"
       ),
     ];
   }
-
-  function finalizarEntrada(seccion) {
-    if (seccion === seccionProyectos && seccion.dataset.entrada !== "final") {
-      registrarEntradaEsquema();
-    }
-    seccion.dataset.entrada = "final";
-  }
-
-  function prepararEsquema() {
-    if (!seccionProyectos || !esquema || !listaEsquema) return;
-
-    let inicioEntrada = -Infinity;
-    let disparado = false;
-    let iniciado = false;
-    let broteEnAire = false;
-    let esperaAire = null;
-    let esperaInicio = null;
-    let ioEsquema = null;
-
-    registrarEntradaEsquema = () => {
-      if (inicioEntrada === -Infinity) inicioEntrada = performance.now();
-    };
-
-    function irAFinalSinAnimar() {
-      esperaAire?.cancelar();
-      if (esperaInicio) {
-        clearTimeout(esperaInicio);
-        esperaInicio = null;
-      }
-      document.documentElement.classList.remove("js-movimiento");
-      listaEsquema.dataset.esquema = "final";
-      finalizarEntrada(seccionProyectos);
-      disparado = true;
-      iniciado = true;
-      ioEsquema?.disconnect();
-    }
-
-    function arrancarTransiciones() {
-      if (iniciado) return;
-      iniciado = true;
-      listaEsquema.dataset.esquema = "final";
-    }
-
-    function programarInicio(tDisparo) {
-      const lanzar = () => {
-        const retraso = Math.max(
-          0,
-          Math.max(tDisparo, inicioEntrada + 120) - performance.now()
-        );
-        esperaInicio = setTimeout(() => {
-          esperaInicio = null;
-          arrancarTransiciones();
-        }, retraso);
-      };
-      if (!broteEnAire) {
-        queueMicrotask(lanzar);
-        return;
-      }
-      const tope = setTimeout(() => {
-        esperaAire = null;
-        queueMicrotask(lanzar);
-      }, 400);
-      esperaAire = {
-        cancelar() {
-          clearTimeout(tope);
-          esperaAire = null;
-        },
-        seguir() {
-          clearTimeout(tope);
-          esperaAire = null;
-          queueMicrotask(lanzar);
-        },
-      };
-    }
-
-    function disparar() {
-      if (disparado) return;
-      disparado = true;
-      ioEsquema?.disconnect();
-      if (seccionProyectos.dataset.entrada !== "final") {
-        finalizarEntrada(seccionProyectos);
-      }
-      programarInicio(performance.now());
-    }
-
-    document.addEventListener("brote:salto", () => {
-      broteEnAire = true;
-    });
-    document.addEventListener("brote:aterrizaje", () => {
-      broteEnAire = false;
-      esperaAire?.seguir();
-    });
-
-    if (!reducido.matches) {
-      document.documentElement.classList.add("js-movimiento");
-      ioEsquema = new IntersectionObserver(
-        (entries) => {
-          if (entries.some((entry) => entry.isIntersecting)) disparar();
-        },
-        { threshold: 0.2 }
-      );
-      ioEsquema.observe(esquema);
-    } else {
-      irAFinalSinAnimar();
-    }
-
-    seccionProyectos.addEventListener("focusin", () => {
-      finalizarEntrada(seccionProyectos);
-      if (!iniciado) irAFinalSinAnimar();
-    });
-
-    reducido.addEventListener("change", () => {
-      if (reducido.matches) irAFinalSinAnimar();
-    });
-  }
-
-  prepararEsquema();
 
   function barridoCruzaTexto(oDoc, dDoc, tam) {
     const bloques = bloquesTextoLinea();
@@ -300,24 +179,6 @@
     mascota.dispatchEvent(
       new CustomEvent(nombre, { detail: detalle, bubbles: true })
     );
-  }
-
-  function continuarPendiente(hasta) {
-    if (!pendiente) return;
-    if (pendiente.hasta === hasta) {
-      cancelarEspera();
-      return;
-    }
-    const espera = Math.max(
-      0,
-      T.quietud - (performance.now() - ultimoScrollT)
-    );
-    clearTimeout(tQuieto);
-    if (espera === 0) {
-      queueMicrotask(lanzarPendiente);
-    } else {
-      tQuieto = setTimeout(lanzarPendiente, espera);
-    }
   }
 
   const mtx = (el) => new DOMMatrixReadOnly(getComputedStyle(el).transform);
@@ -474,6 +335,8 @@
     const tSalidaCarril = A + 0.4 * T.salto;
     const tVueltaCarril =
       A + (nS - 1) * (T.salto + T.contacto) + 0.6 * T.salto;
+    const pSalidaCarril = posSaltoFraccion(0, 0.4);
+    const pVueltaCarril = posSaltoFraccion(nS - 1, 0.6);
 
     const kV = [{ offset: 0, transform: tr(o), easing: E.cuerda }];
     const kArc = [{ offset: 0, transform: "translateY(0px)", easing: E.cuerda }];
@@ -612,20 +475,34 @@
         { offset: 1, transform: "translateX(0px)" }
       );
     } else {
-      if (enCarrilAhora) {
-        kX[0].transform = `translateX(${snapLaneAddV()}px)`;
-        for (const kf of kV) {
-          if (kf.offset <= off(A) + 1e-6) continue;
-          if (kf.offset >= offVuelta - 1e-6) break;
-          addKx(kf.offset, docX(kf.transform), kf.easing);
-        }
-      } else if (origen === "scroll") {
-        kX[0].easing = E.cuerda;
-        addKx(off(A), docX(tr(o)), E.cuerda);
-        for (const kf of kV) {
-          if (kf.offset <= off(A) + 1e-6) continue;
-          if (kf.offset >= offVuelta - 1e-6) break;
-          addKx(kf.offset, docX(kf.transform), kf.easing);
+      const margenDesde =
+        origen === "scroll" || enCarrilAhora
+          ? off(Math.max(A, 0))
+          : offSalida;
+      if (origen === "scroll" || enCarrilAhora) {
+        if (enCarrilAhora) {
+          kX[0].transform = `translateX(${snapLaneAddV()}px)`;
+          for (const kf of kV) {
+            if (kf.offset <= margenDesde + 1e-6) continue;
+            if (kf.offset >= offVuelta - 1e-6) break;
+            addKx(kf.offset, docX(kf.transform), kf.easing);
+          }
+        } else {
+          const k0 = docX(kV[0].transform);
+          kX[0].transform = `translateX(${xAdd0 + xLane - k0}px)`;
+          addKx(
+            margenDesde,
+            docX(
+              kV.find((k) => k.offset >= margenDesde - 1e-6)?.transform ||
+                kV[0].transform
+            ),
+            E.cuerda
+          );
+          for (const kf of kV) {
+            if (kf.offset <= margenDesde + 1e-6) continue;
+            if (kf.offset >= offVuelta - 1e-6) break;
+            addKx(kf.offset, docX(kf.transform), kf.easing);
+          }
         }
       } else {
         addKx(offSalida, docX(tr(posSaltoFraccion(0, 0.4))), E.cuerda);
@@ -752,7 +629,6 @@
       colocar(hasta);
       viajeDestino = null;
       emitir("brote:reposo", { seccion: hasta, origen });
-      continuarPendiente(hasta);
     };
   }
 
@@ -773,7 +649,6 @@
       a2.onfinish = () => {
         colocar(hasta);
         emitir("brote:reposo", { seccion: hasta, origen });
-        continuarPendiente(hasta);
       };
     };
   }
@@ -793,7 +668,6 @@
     const fin = () => {
       colocar(id);
       emitir("brote:reposo", { seccion: id, origen });
-      continuarPendiente(id);
     };
     if (reducido.matches) {
       mascota.style.opacity = "0.01";
@@ -888,7 +762,6 @@
   let acompanandoScroll = false;
   let saltoSinA = false;
   let scrollViajeY = 0;
-  let ultimoScrollT = -Infinity;
 
   function navAlto() {
     return document.querySelector(".nav").offsetHeight;
@@ -912,15 +785,11 @@
     return inter >= 0.5 * s;
   }
 
-  function colocarEnBordeVisible(pantY) {
+  function colocarBajoNav() {
     const s = mascota.offsetWidth;
     const navH = navAlto();
     const p = posDocDesdeCss();
-    const top = Math.max(
-      navH - s / 2,
-      Math.min(pantY, innerHeight - s / 2)
-    );
-    fijar({ x: p.x, y: scrollY + top });
+    fijar({ x: p.x, y: scrollY + navH - s });
   }
 
   function pararAcompanarScroll() {
@@ -932,7 +801,7 @@
   }
 
   function tickAcompanarScroll() {
-    if (!acompanandoScroll || viajando) {
+    if (!acompanandoScroll || !pendiente || viajando) {
       pararAcompanarScroll();
       return;
     }
@@ -951,10 +820,11 @@
   }
 
   function iniciarAcompanarScroll() {
-    if (reducido.matches || acompanandoScroll) return;
+    if (reducido.matches) return;
+    pararAcompanarScroll();
     const r = mascota.getBoundingClientRect();
     if (!visibleEnZona(r.top)) {
-      colocarEnBordeVisible(r.top);
+      colocarBajoNav();
     } else {
       sincDocConPantalla();
     }
@@ -975,27 +845,8 @@
       .forEach((a) => a.setAttribute("aria-current", "true"));
 
     if (origen === "scroll") {
-      if (viajando) {
-        pendiente = {
-          desde: viajeDestino || desde,
-          hasta: id,
-          origen,
-          navScroll: false,
-        };
-        clearTimeout(tQuieto);
-        tQuieto = setTimeout(lanzarPendiente, T.quietud);
-        return;
-      }
-      pendiente = {
-        desde: pendiente ? pendiente.desde : desde,
-        hasta: id,
-        origen,
-        navScroll: false,
-      };
-      clearTimeout(tQuieto);
-      clearTimeout(tTope);
-      iniciarAcompanarScroll();
-      tQuieto = setTimeout(lanzarPendiente, T.quietud);
+      cancelarEspera();
+      viajar(desde, id, origen);
       return;
     }
     if (viajando) {
@@ -1022,9 +873,8 @@
       return;
     }
     const navScroll = origen === "ancla" || origen === "foco";
-    const desdePendiente = pendiente ? pendiente.desde : desde;
     pendiente = {
-      desde: desdePendiente,
+      desde: pendiente ? pendiente.desde : desde,
       hasta: id,
       origen:
         pendiente && pendiente.hasta === id ? pendiente.origen : origen,
@@ -1033,10 +883,6 @@
     clearTimeout(tQuieto);
     clearTimeout(tTope);
     if (navScroll) iniciarAcompanarScroll();
-    if (navScroll && desdePendiente === id && !reducido.matches) {
-      mascota.classList.add("en-viaje");
-      mascota.dataset.estado = "salto";
-    }
     tQuieto = setTimeout(lanzarPendiente, T.quietud);
     tTope = setTimeout(lanzarPendiente, T.topeEspera);
   }
@@ -1049,27 +895,15 @@
   }
 
   function lanzarPendiente() {
-    if (!pendiente) {
-      pararAcompanarScroll();
-      return;
-    }
+    if (!pendiente) return;
     const p = pendiente;
-    if (viajando) return;
-    if (p.origen === "scroll" && candidata !== null) {
-      clearTimeout(tQuieto);
-      tQuieto = setTimeout(lanzarPendiente, T.debounceScroll);
-      return;
-    }
     cancelarEspera();
-    if (p.hasta !== p.desde || p.navScroll || viajando) {
-      viajar(p.desde, p.hasta, p.origen);
-    }
+    if (p.hasta !== p.desde || viajando) viajar(p.desde, p.hasta, p.origen);
   }
 
   addEventListener(
     "scroll",
     () => {
-      ultimoScrollT = performance.now();
       if (viajando) {
         const delta = scrollY - scrollViajeY;
         if (delta !== 0) {
@@ -1078,33 +912,23 @@
           scrollViajeY = scrollY;
         }
       }
-      if (!viajando) {
-        const r = mascota.getBoundingClientRect();
-        if (!visibleEnZona(r.top)) {
-          iniciarAcompanarScroll();
-        }
-        if (acompanandoScroll) {
-          const delta = scrollY - ultimoScrollY;
-          if (delta !== 0) {
-            const p = posDocDesdeCss();
-            fijar({ x: p.x, y: p.y + delta });
-            ultimoScrollY = scrollY;
-          }
+      if (pendiente?.navScroll && !viajando) {
+        const delta = scrollY - ultimoScrollY;
+        if (delta !== 0) {
+          const p = posDocDesdeCss();
+          fijar({ x: p.x, y: p.y + delta });
+          ultimoScrollY = scrollY;
         }
       }
-      clearTimeout(tQuieto);
-      tQuieto = setTimeout(lanzarPendiente, T.quietud);
+      if (pendiente) {
+        clearTimeout(tQuieto);
+        tQuieto = setTimeout(lanzarPendiente, T.quietud);
+      }
     },
     { passive: true }
   );
   if ("onscrollend" in window) {
-    addEventListener("scrollend", () => {
-      clearTimeout(tQuieto);
-      tQuieto = setTimeout(
-        lanzarPendiente,
-        Math.max(0, T.quietud - (performance.now() - ultimoScrollT))
-      );
-    });
+    addEventListener("scrollend", lanzarPendiente);
   }
 
   enlacesNav.forEach((a) => {
@@ -1132,7 +956,7 @@
 
   secciones.forEach((s) => {
     s.addEventListener("focusin", () => {
-      finalizarEntrada(s);
+      s.dataset.entrada = "final";
       bloqueo = s.id;
       setActiva(s.id, "foco");
     });
@@ -1195,14 +1019,14 @@
 
   if (reducido.matches) {
     secciones.forEach((s) => {
-      finalizarEntrada(s);
+      s.dataset.entrada = "final";
     });
   }
   const ioEntrada = new IntersectionObserver(
     (entries) => {
       entries.forEach((e) => {
         if (e.isIntersecting) {
-          finalizarEntrada(e.target);
+          e.target.dataset.entrada = "final";
           ioEntrada.unobserve(e.target);
         }
       });
@@ -1244,7 +1068,7 @@
   const arranqueInicial = () => {
     window.__inicioTituloEntrada = performance.now();
     mascota.style.opacity = "0.01";
-    finalizarEntrada(seccionIni);
+    seccionIni.dataset.entrada = "final";
     void seccionIni.offsetHeight;
     void mascota.offsetHeight;
     aparecer(activa, "inicio");
@@ -1258,7 +1082,7 @@
   reducido.addEventListener("change", () => {
     if (reducido.matches) {
       secciones.forEach((s) => {
-        finalizarEntrada(s);
+        s.dataset.entrada = "final";
       });
     }
     cancelarEspera();

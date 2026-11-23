@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execSync } from "node:child_process";
 
 /** Recompensa cy si scrollY cambia durante el salto (coords de pantalla con scroll congelado). */
 /** cy de ancla (mitad del tamaño lógico `offsetWidth`, sin sesgo del bbox escalado). */
@@ -243,20 +243,8 @@ function fusionarPng(bg, overlay, outPath) {
   fs.writeFileSync(bgPath, bg);
   fs.writeFileSync(ovPath, overlay);
   try {
-    execFileSync(
-      "ffmpeg",
-      [
-        "-y",
-        "-i",
-        bgPath,
-        "-i",
-        ovPath,
-        "-filter_complex",
-        "[0:v][1:v]overlay=0:0",
-        "-frames:v",
-        "1",
-        outPath,
-      ],
+    execSync(
+      `ffmpeg -y -i "${bgPath}" -i "${ovPath}" -filter_complex "[0:v][1:v]overlay=0:0" -frames:v 1 "${outPath}"`,
       { stdio: "pipe" }
     );
   } finally {
@@ -344,20 +332,8 @@ export async function combinarPaneles(browser, w, h, leftUrl, rightUrl, outPath)
   fs.writeFileSync(lPath, decodificarDataUrl(leftUrl));
   fs.writeFileSync(rPath, decodificarDataUrl(rightUrl));
   try {
-    execFileSync(
-      "ffmpeg",
-      [
-        "-y",
-        "-i",
-        lPath,
-        "-i",
-        rPath,
-        "-filter_complex",
-        "[0:v][1:v]hstack=inputs=2",
-        "-frames:v",
-        "1",
-        outPath,
-      ],
+    execSync(
+      `ffmpeg -y -i "${lPath}" -i "${rPath}" -filter_complex "[0:v][1:v]hstack=inputs=2" -frames:v 1 "${outPath}"`,
       { stdio: "pipe" }
     );
   } finally {
